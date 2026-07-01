@@ -1,0 +1,15 @@
+pre-commit:
+  parallel: true
+  commands:
+    biome:
+      glob: '*.{ts,tsx,js,jsx,json,jsonc}'
+      run: npx biome check --fix --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+      skip:
+        - merge
+        - rebase
+
+commit-msg:
+  commands:
+    commitlint:
+      run: npx commitlint --edit {1}

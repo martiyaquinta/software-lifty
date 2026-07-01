@@ -1,9 +1,40 @@
 # Lifty — Monorepo
 
+**IMPORTANT — PROJECT STATUS**: Lifty is in **active development**. There is NO production deployment, NO MVP, NO staging environment. No CD pipeline exists. All infrastructure is local/dev-only. Do NOT attempt to deploy or configure production services. The backend runs on `localhost`, the mobile app uses Expo Go in development mode. This status applies until explicitly changed in this file.
+
 ## Stack
 - **Monorepo**: Bun Workspaces + Turborepo
 - **Backend**: Bun + Elysia + Drizzle ORM + PostgreSQL (Supabase) — `apps/backend`
 - **Mobile**: Expo SDK 54 + React 19 + react-native 0.81 — `apps/mobile`
+- **Pre-commit**: Lefthook (biome on staged files) + Commitlint (conventional commits)
+- **CI**: GitHub Actions (lint, typecheck, test via turbo)
+
+## Development Workflow
+
+### Branch protection
+- `main` is **protected** — never push directly. All changes via PR.
+- CI must pass before merge (lint + typecheck + test).
+- Deletion and force push are blocked.
+- Configured via GitHub Rulesets.
+
+### Commit conventions
+All commits must follow [Conventional Commits](https://www.conventionalcommits.org/):
+```
+feat: add driver onboarding flow
+fix: correct trip fare calculation
+docs: update API endpoints
+chore: upgrade dependencies
+refactor: extract auth middleware
+test: add SOS endpoint coverage
+```
+Enforced by commitlint via Lefthook on `commit-msg`. Invalid messages are rejected.
+
+### Pre-commit hooks (Lefthook)
+On every commit, Lefthook runs:
+- `biome check --fix` on staged `*.ts`, `*.tsx`, `*.js`, `*.json` files
+- `commitlint` validates the commit message format
+
+Hooks are skipped on merge and rebase.
 
 ## Commands (from root)
 ```bash
@@ -25,15 +56,32 @@ bun --filter @lifty/mobile dev
 
 ## Directory layout
 ```
-software/
+software-lifty/
 ├── apps/
 │   ├── backend/       # @lifty/backend — Elysia API
 │   └── mobile/        # @lifty/mobile — Expo app
 ├── specs/             # Product specs
 ├── turbo.json         # Turborepo pipeline
 ├── biome.json         # Linter + formatter config
+├── lefthook.yml       # Pre-commit hooks config
+├── commitlint.config.js
+├── .github/workflows/ci.yml
 └── package.json       # Root workspace config
 ```
+
+## CI/CD
+
+### What CI does (GitHub Actions)
+- **lint**: Biome check on every push/PR
+- **typecheck**: `tsc --noEmit` on both projects
+- **test**: Backend tests with PostgreSQL + Redis services (depends on lint + typecheck passing first)
+- **Turbo cache**: Cached between runs via `actions/cache`
+
+### What we DON'T have (by design — no production yet)
+- No CD pipeline (no Docker registry, no EAS builds, no deployment)
+- No staging/production environments
+- No versioned releases
+- No changelog automation
 
 ## Per-project details
 
@@ -54,10 +102,7 @@ Quick ref:
 - React Compiler enabled
 - Theme: `src/theme/index.ts`, usar siempre `theme.colors.*`, etc.
 
-## Tech Debt (post-migration)
+## Tech Debt
 1. **Backend test script**: `"test": "echo \"Error: no test specified\"` — arreglar para que corra los 194 tests existentes
 2. **Frontend test script**: Jest instalado pero sin script `test` en package.json — agregarlo
-3. **Pre-commit hooks**: Husky + lint-staged para lint + typecheck antes de commit
-4. **CI/CD pipeline**: GitHub Actions con `turbo build`, `turbo test`, `turbo lint`
-5. **Shared tsconfig**: `tsconfig.base.json` en root para extender en ambos proyectos
-6. **GitHub Workflows**: Consolidar `.github/workflows/` a nivel root (actualmente en `apps/backend/`)
+3. **Shared tsconfig**: `tsconfig.base.json` en root para extender en ambos proyectos

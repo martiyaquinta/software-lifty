@@ -2,6 +2,8 @@
 
 Monorepo for the Lifty platform — backend API and mobile app for drivers.
 
+> **Status: Active Development.** No production deployment, no MVP, no staging. Everything is local/dev only. See `AGENTS.md` for full project context.
+
 ## Stack
 
 | Layer | Tech |
@@ -10,6 +12,8 @@ Monorepo for the Lifty platform — backend API and mobile app for drivers.
 | Backend | Bun + Elysia + Drizzle ORM + PostgreSQL (Supabase) |
 | Mobile | Expo SDK 54 + React 19 + TypeScript |
 | Linting | Biome |
+| Pre-commit | Lefthook + Commitlint |
+| CI | GitHub Actions (turbo) |
 | Auth | JWT (jose) + refresh tokens |
 | Email | Resend |
 | Cache | Redis (ioredis) |
@@ -26,24 +30,16 @@ specs/          # Product specs
 ## Getting Started
 
 ```bash
-# Install dependencies
-bun install
-
-# Run both apps in development
-bun run dev
-
-# TypeScript check
-bun run typecheck
-
-# Lint + format
-bun run check
+bun install       # install all dependencies
+bun run dev       # start both apps in parallel
+bun run check     # lint + typecheck
 ```
 
 ### Per-app
 
 ```bash
-bun --filter @lifty/backend dev    # backend only
-bun --filter @lifty/mobile dev     # mobile only
+bun --filter @lifty/backend dev
+bun --filter @lifty/mobile dev
 ```
 
 ## Scripts
@@ -57,6 +53,17 @@ bun --filter @lifty/mobile dev     # mobile only
 | `bun run format` | Biome format |
 | `bun run check` | lint + typecheck |
 | `bun run clean` | Clean turbo cache |
+
+## Commit conventions
+
+All commits use [Conventional Commits](https://www.conventionalcommits.org/). Valid types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `ci`, `build`.
+
+```
+feat: add driver onboarding flow
+fix: correct trip fare calculation
+```
+
+Enforced by commitlint + Lefthook pre-commit.
 
 ## Environment
 
