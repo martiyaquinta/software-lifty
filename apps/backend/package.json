@@ -1,6 +1,7 @@
 {
   "name": "@lifty/backend",
   "version": "1.0.50",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "bun run --watch src/index.ts",
@@ -27,7 +28,8 @@
     "@types/pg": "^8.20.0",
     "bun-types": "latest",
     "drizzle-kit": "^0.31.10",
-    "fast-check": "^4.8.0"
+    "fast-check": "^4.8.0",
+    "typescript": "5.2.2"
   },
   "module": "src/index.js"
 }

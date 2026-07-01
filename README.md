@@ -2,6 +2,8 @@
 
 Monorepo for the Lifty platform — backend API and mobile app for drivers.
 
+[![CI](https://github.com/martiyaquinta/software-lifty/actions/workflows/ci.yml/badge.svg)](https://github.com/martiyaquinta/software-lifty/actions/workflows/ci.yml)
+
 > **Status: Active Development.** No production deployment, no MVP, no staging. Everything is local/dev only. See `AGENTS.md` for full project context.
 
 ## Stack
