@@ -37,8 +37,7 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-
       - run: bun install
-      - run: cd apps/backend && tsc --noEmit --project tsconfig.ci.json
-      - run: cd apps/mobile && bun run typecheck
+      - run: bun run typecheck
 
   test:
     needs: [lint, typecheck]
