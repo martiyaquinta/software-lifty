@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": ["apps/*"],
   "scripts": {
+    "postinstall": "rm -f apps/backend/node_modules/.bin/tsc apps/backend/node_modules/.bin/tsserver",
     "dev": "turbo dev",
     "build": "turbo build",
     "test": "turbo test",
