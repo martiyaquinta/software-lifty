@@ -1,0 +1,161 @@
+import { QueryClientProvider } from '@tanstack/react-query';
+import * as Notifications from 'expo-notifications';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { apiClient } from '../src/api/client';
+import { driverStatusSchema } from '../src/api/types';
+import { ConnectivityBanner } from '../src/components/feedback/ConnectivityBanner';
+import { ErrorBoundary } from '../src/components/feedback/ErrorBoundary';
+import { useAppNavigation } from '../src/hooks/useAppNavigation';
+import {
+  handleNotificationResponse,
+  registerForPush,
+  setupNotificationHandler,
+} from '../src/lib/notifications';
+import { queryClient } from '../src/lib/queryClient';
+import { useAuthStore } from '../src/store/authStore';
+import { theme } from '../src/theme';
+
+function AuthRedirectWatcher() {
+  const needsRedirect = useAuthStore((s) => s.needsRedirect);
+  const resetRedirect = useAuthStore((s) => s.resetRedirect);
+  const router = useRouter();
+  const segments = useSegments();
+
+  useEffect(() => {
+    if (needsRedirect) {
+      resetRedirect();
+      if (segments[0] !== undefined) {
+        router.replace('/');
+      }
+    }
+  }, [needsRedirect, resetRedirect, router, segments]);
+
+  return null;
+}
+
+function SessionRestore() {
+  useEffect(() => {
+    const restore = async () => {
+      const token = useAuthStore.getState().token;
+      if (!token) return;
+
+      try {
+        const response = await apiClient.get('/auth/me');
+        const user = response.data;
+        if (user?.id) {
+          useAuthStore.getState().setDriverId(user.id);
+        }
+
+        try {
+          const statusRes = await apiClient.get('/drivers/me/status');
+          const parsed = driverStatusSchema.safeParse(statusRes.data?.data ?? statusRes.data);
+          if (parsed.success) {
+            useAuthStore.getState().setDriverStatus(parsed.data.status);
+          }
+        } catch {
+          // driver may not exist yet
+        }
+      } catch {
+        // token invalid or expired — app proceeds unauthenticated
+      }
+    };
+    restore();
+  }, []);
+
+  return null;
+}
+
+function ActiveTripRecovery() {
+  const driverId = useAuthStore((s) => s.driverId);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!driverId) return;
+    const check = async () => {
+      try {
+        const response = await apiClient.get('/drivers/me/trips/active');
+        const trip = response.data?.data ?? response.data;
+        if (trip) {
+          switch (trip.status) {
+            case 'accepted':
+              router.replace('/navigation');
+              break;
+            case 'driver_arrived':
+              router.replace('/waiting-passenger');
+              break;
+            case 'in_progress':
+              router.replace('/trip-in-progress');
+              break;
+            case 'requested':
+              router.replace('/incoming-request');
+              break;
+            default:
+              break;
+          }
+        }
+      } catch {
+        // no active trip or API error — stay on current screen
+      }
+    };
+    check();
+  }, [driverId, router]);
+
+  return null;
+}
+
+function NotificationSetup() {
+  const { navigate } = useAppNavigation();
+
+  useEffect(() => {
+    setupNotificationHandler();
+
+    registerForPush().then((token) => {
+      if (token) {
+        console.log('Expo push token:', token);
+      }
+    });
+
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      handleNotificationResponse(response, navigate);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  return null;
+}
+
+export default function RootLayout() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ErrorBoundary>
+        <View style={styles.root}>
+          <StatusBar style="auto" />
+          <AuthRedirectWatcher />
+          <SessionRestore />
+          <ActiveTripRecovery />
+          <NotificationSetup />
+          <ConnectivityBanner />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              animation: 'slide_from_right',
+              contentStyle: { backgroundColor: theme.colors.white },
+            }}
+          />
+        </View>
+      </ErrorBoundary>
+    </QueryClientProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+});

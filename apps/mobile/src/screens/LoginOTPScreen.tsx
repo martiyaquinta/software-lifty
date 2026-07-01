@@ -1,0 +1,186 @@
+/**
+ * @deprecated Email-only auth (feature 003). Phone auth removed from main flow.
+ * This screen now works with email verification codes via Resend.
+ */
+import type React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { apiClient } from '../api/client';
+import { driverStatusSchema } from '../api/types';
+import { Button } from '../components/Button';
+import { OTPInput } from '../components/OTPInput';
+import { useAppNavigation } from '../hooks/useAppNavigation';
+import { useVerifyEmail } from '../hooks/useAuth';
+import { useAuthStore } from '../store/authStore';
+import { theme } from '../theme';
+
+const COOLDOWN_SECONDS = 30;
+
+export const LoginOTPScreen: React.FC = () => {
+  const navigation = useAppNavigation();
+  const verifyEmail = useVerifyEmail();
+  const email = useAuthStore((s) => s.phone);
+  const setDriverStatus = useAuthStore((s) => s.setDriverStatus);
+  const [otp, setOtp] = useState('');
+  const [cooldown, setCooldown] = useState(0);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (cooldown > 0) {
+      intervalRef.current = setInterval(() => {
+        setCooldown((prev) => {
+          if (prev <= 1) {
+            if (intervalRef.current) clearInterval(intervalRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [cooldown]);
+
+  const handleResend = useCallback(async () => {
+    if (cooldown > 0 || !email || verifyEmail.isPending) return;
+    setCooldown(COOLDOWN_SECONDS);
+  }, [cooldown, email, verifyEmail]);
+
+  const handleVerify = async () => {
+    if (otp.length !== 6 || verifyEmail.isPending || !email) return;
+    setStatusError(null);
+    try {
+      await verifyEmail.mutateAsync({ email, token: otp } as any);
+      try {
+        const { data: body } = await apiClient.get('/drivers/me/status');
+        const payload = body?.data ?? body;
+        const parsed = driverStatusSchema.safeParse(payload);
+        const status: string = parsed.success ? parsed.data.status : payload?.status;
+        if (
+          status &&
+          ['pending', 'approved', 'under_review', 'rejected', 'suspended'].includes(status)
+        ) {
+          setDriverStatus(
+            status as 'pending' | 'approved' | 'under_review' | 'rejected' | 'suspended',
+          );
+        }
+
+        switch (status) {
+          case 'pending':
+            navigation.navigate('Terms');
+            break;
+          case 'approved':
+            navigation.navigate('Online');
+            break;
+          case 'under_review':
+            navigation.navigate('UnderReview');
+            break;
+          case 'rejected':
+            setStatusError('Tu cuenta ha sido rechazada. Contacta a soporte.');
+            break;
+          case 'suspended':
+            setStatusError('Tu cuenta ha sido suspendida.');
+            break;
+          default:
+            navigation.navigate('Online');
+            break;
+        }
+      } catch (apiErr: any) {
+        setStatusError(apiErr?.message ?? 'Error al verificar el estado de tu cuenta.');
+      }
+    } catch {
+      // error displayed via verifyEmail.error
+    }
+  };
+
+  const isOTPComplete = otp.length === 6;
+  const displayEmail = email || '';
+  const errorMessage = verifyEmail.error?.message || statusError;
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.backText}>← Volver</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.spacer} />
+      <Text style={styles.title}>Ingresa el codigo</Text>
+      <Text style={styles.subtitle}>
+        {email
+          ? `Te enviamos un codigo a ${displayEmail}`
+          : 'Te enviamos un codigo de verificacion'}
+      </Text>
+      <OTPInput length={6} value={otp} onChange={setOtp} />
+      <TouchableOpacity onPress={handleResend} disabled={cooldown > 0 || verifyEmail.isPending}>
+        <Text
+          style={[styles.resend, (cooldown > 0 || verifyEmail.isPending) && styles.resendDisabled]}
+        >
+          {cooldown > 0 ? `Reenviar en ${cooldown}s` : 'No te llego? Reenviar'}
+        </Text>
+      </TouchableOpacity>
+      {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+      <View style={styles.spacer} />
+      <Button
+        title="VERIFICAR CODIGO"
+        onPress={handleVerify}
+        disabled={!isOTPComplete}
+        loading={verifyEmail.isPending}
+        style={styles.button}
+      />
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.white,
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  header: {
+    height: theme.dimensions.navbarHeight,
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.md,
+  },
+  backText: {
+    color: theme.colors.deepBlue,
+    fontSize: theme.fontSize.lg,
+    fontWeight: theme.fontWeight.medium,
+  },
+  spacer: {
+    height: 32,
+    width: 1,
+  },
+  title: {
+    fontSize: theme.fontSize.xl,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.deepBlue,
+  },
+  subtitle: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.mediumGray,
+  },
+  resend: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.turquoise,
+  },
+  resendDisabled: {
+    color: theme.colors.mediumGray,
+  },
+  error: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.dangerRed,
+    textAlign: 'center',
+  },
+  button: {
+    width: 327,
+  },
+});

@@ -1,0 +1,230 @@
+import { swagger } from '@elysiajs/swagger';
+import { Elysia } from 'elysia';
+import { authRoutes } from './features/auth/routes';
+import { districtsRoutes } from './features/districts/routes';
+import { driversRoutes } from './features/drivers/routes';
+import { driverStatsRoutes, earningsRoutes } from './features/earnings/routes';
+import { kycRoutes } from './features/kyc/routes';
+import { locationHttpPlugin, locationWsPlugin } from './features/location/routes';
+import { mapsRoutes } from './features/maps/routes';
+import { notificationsRoutes } from './features/notifications/routes';
+import { onboardingRoutes } from './features/onboarding/routes';
+import { paymentMethodsRoutes } from './features/payment-methods/routes';
+import { paymentsRoutes } from './features/payments/routes';
+import { ratingsRoutes } from './features/ratings/routes';
+import { sosRoutes } from './features/sos/routes';
+import { tripRoutes } from './features/trips/routes';
+import { getDb, getPool, resetDb } from './shared/db/client';
+import { runReadyChecks } from './shared/lib/health';
+import { logger } from './shared/lib/logger';
+import { dbPoolAvailable, dbPoolSize, registry } from './shared/lib/metrics';
+import { closeRedis, getRedis } from './shared/lib/redis';
+import { authPlugin } from './shared/middleware/auth';
+import { metricsMiddleware } from './shared/middleware/metrics';
+import { rateLimit } from './shared/middleware/ratelimit';
+import { requestId } from './shared/middleware/request-id';
+import { cors, securityHeaders } from './shared/middleware/security';
+
+function validateEnv() {
+  const required = ['JWT_SECRET', 'DATABASE_URL', 'RESEND_API_KEY'];
+  for (const key of required) {
+    if (!process.env[key]) throw new Error(`Missing required env var: ${key}`);
+  }
+  if ((process.env.JWT_SECRET?.length ?? 0) < 32)
+    throw new Error('JWT_SECRET must be at least 32 characters');
+  const port = process.env.PORT;
+  if (port !== undefined && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)) {
+    throw new Error('PORT must be a valid port number (1-65535)');
+  }
+}
+
+if (process.env.NODE_ENV === 'production') {
+  validateEnv();
+}
+
+export function createApp() {
+  const app = new Elysia();
+
+  if (process.env.NODE_ENV !== 'production') {
+    app.use(
+      swagger({
+        path: '/docs',
+        documentation: {
+          info: {
+            title: 'Lifty API',
+            version: '1.0.0',
+            description: 'Driver-Side MVP — Lifty backend. 49 endpoints, 15 DB tables, 111 tests.',
+          },
+          tags: [
+            { name: 'auth', description: 'Autenticación, registro, login, JWT' },
+            { name: 'onboarding', description: 'Onboarding del conductor (5 pasos)' },
+            { name: 'kyc', description: 'Verificación de identidad DIDIT' },
+            { name: 'trips', description: 'State machine de viajes' },
+            { name: 'location', description: 'WebSocket ubicación en tiempo real' },
+            { name: 'maps', description: 'Proxy Google Maps' },
+            { name: 'payments', description: 'Webhook Mercado Pago + withdrawals' },
+            { name: 'earnings', description: 'Ganancias y estadísticas' },
+            { name: 'ratings', description: 'Calificaciones' },
+            { name: 'sos', description: 'Emergencias' },
+            { name: 'notifications', description: 'Push tokens FCM' },
+            { name: 'drivers', description: 'Perfil público y privado' },
+            { name: 'districts', description: 'Zonas operativas' },
+          ],
+        },
+      }),
+    );
+  }
+
+  app
+    .use(cors)
+    .use(securityHeaders)
+    .use(requestId)
+    .use(metricsMiddleware)
+    .use(
+      rateLimit({
+        windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60_000,
+        max: Number(process.env.RATE_LIMIT_MAX) || 100,
+      }),
+    )
+    .use(authPlugin)
+    .use(locationWsPlugin)
+    .group('/api', (app) =>
+      app
+        .use(authRoutes)
+        .use(paymentMethodsRoutes)
+        .use(onboardingRoutes)
+        .use(kycRoutes)
+        .use(tripRoutes)
+        .use(mapsRoutes)
+        .use(paymentsRoutes)
+        .use(earningsRoutes)
+        .use(driverStatsRoutes)
+        .use(ratingsRoutes)
+        .use(sosRoutes)
+        .use(notificationsRoutes)
+        .use(driversRoutes)
+        .use(districtsRoutes)
+        .use(locationHttpPlugin),
+    )
+    .get('/health', async ({ set }) => {
+      const checks: Record<string, string> = {};
+      let degraded = false;
+
+      try {
+        await getDb().execute('SELECT 1');
+        checks.database = 'connected';
+      } catch (err) {
+        checks.database = 'disconnected';
+        degraded = true;
+        logger.warn('[HEALTH] DB check failed', { error: (err as Error).message });
+      }
+
+      const redis = getRedis();
+      if (redis) {
+        try {
+          await redis.ping();
+          checks.redis = 'connected';
+        } catch (err) {
+          checks.redis = 'disconnected';
+          degraded = true;
+          logger.warn('[HEALTH] Redis check failed', { error: (err as Error).message });
+        }
+      } else {
+        checks.redis = 'unconfigured';
+      }
+
+      if (process.env.MERCADOPAGO_ACCESS_TOKEN) {
+        checks.mercadopago = 'configured';
+      }
+      if (process.env.RESEND_API_KEY) {
+        checks.resend = 'configured';
+      }
+      if (process.env.SUPABASE_URL) {
+        checks.supabase = 'configured';
+      }
+      if (process.env.DIDIT_API_KEY) {
+        checks.didit = 'configured';
+      }
+
+      set.status = degraded ? 200 : 200;
+      return {
+        status: degraded ? 'degraded' : 'ok',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        checks,
+      };
+    })
+    .get('/ready', async ({ set }) => {
+      const { ready, reason } = await runReadyChecks();
+      if (!ready) {
+        set.status = 503;
+        return { status: 'not ready', reason };
+      }
+      return { status: 'ready' };
+    })
+    .get('/metrics', ({ set }) => {
+      const pool = getPool();
+      if (pool) {
+        dbPoolSize.set({}, pool.totalCount);
+        dbPoolAvailable.set({}, pool.idleCount);
+      }
+      set.headers['Content-Type'] = 'text/plain; version=0.0.4; charset=utf-8';
+      return registry.getPrometheusText();
+    });
+
+  app.onError(({ code, error, set }) => {
+    const msg = (error as Error)?.message ?? 'Unknown error';
+    const reqId = (set.headers['X-Request-ID'] as string) || 'unknown';
+
+    switch (code) {
+      case 'NOT_FOUND':
+        set.status = 404;
+        return {
+          error: { code: 'NOT_FOUND', message: msg, status: 404 },
+          meta: { timestamp: new Date().toISOString() },
+        };
+      case 'VALIDATION':
+        set.status = 400;
+        return {
+          error: { code: 'VALIDATION_ERROR', message: msg, status: 400 },
+          meta: { timestamp: new Date().toISOString() },
+        };
+      default:
+        set.status = 500;
+        return {
+          error: {
+            code: 'INTERNAL_ERROR',
+            message:
+              process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test'
+                ? msg
+                : 'Something went wrong',
+            status: 500,
+          },
+          meta: { timestamp: new Date().toISOString() },
+        };
+    }
+  });
+
+  return app;
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  const app = createApp().listen(process.env.PORT || 3000);
+  logger.info('Server running on port', String(app.server?.port));
+
+  process.on('SIGINT', async () => {
+    logger.info('Shutting down...');
+    await app.stop();
+    resetDb();
+    closeRedis();
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', async () => {
+    logger.info('Shutting down...');
+    await app.stop();
+    resetDb();
+    closeRedis();
+    process.exit(0);
+  });
+}

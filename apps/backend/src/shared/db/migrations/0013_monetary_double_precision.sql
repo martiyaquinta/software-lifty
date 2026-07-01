@@ -1,0 +1,10 @@
+ALTER TABLE "trips" ALTER COLUMN "base_fare" TYPE double precision;
+ALTER TABLE "trips" ALTER COLUMN "distance_fare" TYPE double precision;
+ALTER TABLE "trips" ALTER COLUMN "time_fare" TYPE double precision;
+ALTER TABLE "trips" ALTER COLUMN "total_fare" TYPE double precision;
+ALTER TABLE "trips" ALTER COLUMN "platform_fee" TYPE double precision;
+ALTER TABLE "trips" ALTER COLUMN "driver_earnings" TYPE double precision;
+ALTER TABLE "payments" ALTER COLUMN "amount" TYPE double precision;
+ALTER TABLE "payments" ALTER COLUMN "platform_amount" TYPE double precision;
+ALTER TABLE "payments" ALTER COLUMN "driver_amount" TYPE double precision;
+ALTER TABLE "withdrawals" ALTER COLUMN "amount" TYPE double precision;

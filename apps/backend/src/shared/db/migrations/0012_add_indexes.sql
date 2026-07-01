@@ -1,0 +1,15 @@
+CREATE INDEX IF NOT EXISTS "idx_trips_driver_id" ON "trips" ("driver_id");
+CREATE INDEX IF NOT EXISTS "idx_trips_status" ON "trips" ("status");
+CREATE INDEX IF NOT EXISTS "idx_trips_created_at" ON "trips" ("created_at");
+CREATE INDEX IF NOT EXISTS "idx_payments_trip_id" ON "payments" ("trip_id");
+CREATE INDEX IF NOT EXISTS "idx_payments_created_at" ON "payments" ("created_at");
+CREATE INDEX IF NOT EXISTS "idx_withdrawals_driver_id" ON "withdrawals" ("driver_id");
+CREATE INDEX IF NOT EXISTS "idx_withdrawals_created_at" ON "withdrawals" ("created_at");
+CREATE INDEX IF NOT EXISTS "idx_ratings_ratee_id" ON "ratings" ("ratee_id");
+CREATE INDEX IF NOT EXISTS "idx_ratings_trip_id" ON "ratings" ("trip_id");
+CREATE INDEX IF NOT EXISTS "idx_sos_events_user_id" ON "sos_events" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_push_tokens_user_id" ON "push_tokens" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_refresh_tokens_user_id" ON "refresh_tokens" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_refresh_tokens_expires_at" ON "refresh_tokens" ("expires_at");
+CREATE INDEX IF NOT EXISTS "idx_driver_documents_driver_id" ON "driver_documents" ("driver_id");
+CREATE INDEX IF NOT EXISTS "idx_payout_methods_driver_id" ON "payout_methods" ("driver_id");

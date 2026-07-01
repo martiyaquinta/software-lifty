@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env.production
+    restart: unless-stopped
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "bun", "run", "scripts/health-check.ts"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: lifty
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-lifty}
+      POSTGRES_DB: lifty
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    profiles:
+      - self-hosted
+
+volumes:
+  pgdata:
+  redisdata:
