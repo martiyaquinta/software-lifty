@@ -44,6 +44,24 @@ export const driversService = {
     };
   },
 
+  async getMyStatus(user: AuthUser) {
+    const [driver] = await db
+      .select({ status: drivers.status, kyc_status: drivers.kyc_status })
+      .from(drivers)
+      .where(eq(drivers.user_id, user.id))
+      .limit(1);
+
+    // Map the internal onboarding lifecycle (step1..step3/kyc) to the
+    // coarse status vocabulary the app navigates with.
+    if (!driver) return { status: 'pending' };
+    if (driver.status === 'approved' || driver.status === 'suspended') {
+      return { status: driver.status };
+    }
+    if (driver.kyc_status === 'under_review') return { status: 'under_review' };
+    if (driver.kyc_status === 'rejected') return { status: 'rejected' };
+    return { status: 'pending' };
+  },
+
   async toggleOnline(user: AuthUser, isOnline: boolean) {
     const [driver] = await db
       .select({ id: drivers.id, is_online: drivers.is_online })

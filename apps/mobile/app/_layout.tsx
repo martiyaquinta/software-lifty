@@ -76,7 +76,7 @@ function ActiveTripRecovery() {
     if (!driverId) return;
     const check = async () => {
       try {
-        const response = await apiClient.get('/drivers/me/trips/active');
+        const response = await apiClient.get('/trips/active');
         const trip = response.data?.data ?? response.data;
         if (trip) {
           switch (trip.status) {

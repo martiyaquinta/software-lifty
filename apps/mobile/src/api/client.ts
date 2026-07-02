@@ -70,6 +70,12 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
+// A 401 from these endpoints is a definitive answer (bad credentials, bad
+// code, dead refresh token) — retrying with a refreshed access token makes
+// no sense. In particular, letting /auth/refresh re-enter the refresh flow
+// deadlocks the queue.
+const NO_REFRESH_PATHS = ['/auth/login', '/auth/register', '/auth/verify', '/auth/refresh'];
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
@@ -77,7 +83,9 @@ apiClient.interceptors.response.use(
       _retry?: boolean;
     };
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const skipRefresh = NO_REFRESH_PATHS.some((path) => originalRequest?.url?.includes(path));
+
+    if (error.response?.status === 401 && !originalRequest._retry && !skipRefresh) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({
