@@ -52,7 +52,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd pg_isready -U lifty
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -77,10 +77,12 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-
       - run: bun install
-      - run: bun --cwd apps/backend run db:migrate
+      - run: bun run db:migrate
+        working-directory: apps/backend
         env:
           DATABASE_URL: postgresql://lifty:lifty@localhost:5432/lifty_test
       - run: bun run test
         env:
+          DATABASE_URL: postgresql://lifty:lifty@localhost:5432/lifty_test
           TEST_DATABASE_URL: postgresql://lifty:lifty@localhost:5432/lifty_test
           JWT_SECRET: test-jwt-secret-at-least-32-chars
