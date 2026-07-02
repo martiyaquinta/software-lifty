@@ -122,7 +122,7 @@ export const LoginCredentialsScreen: React.FC = () => {
             style={styles.button}
           />
           {error !== null && <Text style={styles.errorText}>{error}</Text>}
-          <TouchableOpacity onPress={() => {}}>
+          <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
             <Text style={styles.forgotPassword}>Olvidaste tu contrasena?</Text>
           </TouchableOpacity>
         </ScrollView>

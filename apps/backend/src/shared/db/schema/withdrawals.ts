@@ -11,7 +11,7 @@ export const withdrawals = pgTable('withdrawals', {
   payout_method_id: uuid('payout_method_id')
     .notNull()
     .references(() => payoutMethods.id),
-  mp_withdrawal_id: varchar('mp_withdrawal_id', { length: 100 }),
+  mp_withdrawal_id: varchar('mp_withdrawal_id', { length: 100 }).unique(),
   status: varchar('status', { length: 30 }).notNull().default('pending'),
   created_at: timestamp('created_at').defaultNow().notNull(),
 });

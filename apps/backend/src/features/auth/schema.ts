@@ -19,6 +19,16 @@ export const refreshBody = t.Object({
   refresh_token: t.String(),
 });
 
+export const emailOnlyBody = t.Object({
+  email: t.String({ format: 'email' }),
+});
+
+export const resetPasswordBody = t.Object({
+  email: t.String({ format: 'email' }),
+  code: t.String({ minLength: 6, maxLength: 6 }),
+  password: t.String({ minLength: 6 }),
+});
+
 export const messageResponse = t.Object({
   message: t.String(),
 });

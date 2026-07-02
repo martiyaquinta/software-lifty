@@ -1,4 +1,4 @@
-import { and, eq, gt } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
 import { refreshTokens, users } from '../../shared/db/schema';
 import { sendEmail } from '../../shared/lib/email';
@@ -6,20 +6,58 @@ import {
   BadRequestError,
   ConflictError,
   NotFoundError,
+  TooManyRequestsError,
   UnauthorizedError,
 } from '../../shared/lib/errors';
-import { hashToken, signAccess, signRefresh, verifyAccess } from '../../shared/lib/jwt';
+import { hashToken, signAccess, signRefresh } from '../../shared/lib/jwt';
 import { logger } from '../../shared/lib/logger';
 import type { AuthUser } from '../../shared/middleware/auth';
 
 const REFRESH_TOKEN_DAYS = 30;
+const VERIFICATION_CODE_MINUTES = 60;
+const RESET_CODE_MINUTES = 15;
+const MAX_CODE_ATTEMPTS = 5;
+const RESEND_COOLDOWN_MS = 60 * 1000;
 
 function generateCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+// Outside production, print codes to the log so flows can be tested
+// without a real inbox. Never enabled in production: codes are secrets.
+function logCodeForDev(kind: string, email: string, code: string) {
+  if (process.env.NODE_ENV !== 'production') {
+    logger.info(`[AUTH] (dev) ${kind} code`, { email, code });
+  }
+}
+
+// Codes carry their issue time implicitly: expires_at - lifetime = issued_at.
+function issuedLessThanCooldownAgo(expiresAt: Date | null, lifetimeMinutes: number): boolean {
+  if (!expiresAt) return false;
+  const issuedAt = expiresAt.getTime() - lifetimeMinutes * 60 * 1000;
+  return Date.now() - issuedAt < RESEND_COOLDOWN_MS;
+}
+
+function codeEmailHtml(title: string, code: string, expiryText: string): string {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+      <h2 style="color: #0D2B45;">${title}</h2>
+      <p style="color: #A8B1BA; font-size: 16px;">Tu codigo es:</p>
+      <div style="background: #F1F4F6; border-radius: 8px; padding: 24px; text-align: center; margin: 24px 0;">
+        <span style="font-size: 32px; font-weight: bold; color: #0D2B45; letter-spacing: 8px;">${code}</span>
+      </div>
+      <p style="color: #A8B1BA; font-size: 14px;">${expiryText}</p>
+    </div>
+  `;
+}
+
 export const authService = {
-  async register(email: string, password: string) {
+  async register(rawEmail: string, password: string) {
+    const email = normalizeEmail(rawEmail);
     logger.info('[AUTH] Register attempt', { email });
     const existing = await db
       .select({ id: users.id })
@@ -34,7 +72,7 @@ export const authService = {
     logger.info('[AUTH] Register — creating user');
     const passwordHash = await Bun.password.hash(password);
     const verificationCode = generateCode();
-    const codeExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    const codeExpiresAt = new Date(Date.now() + VERIFICATION_CODE_MINUTES * 60 * 1000);
 
     const [user] = await db
       .insert(users)
@@ -47,21 +85,14 @@ export const authService = {
       })
       .returning({ id: users.id, email: users.email });
 
-    logger.info('[AUTH] Register — user created', {
-      userId: user.id.split('-')[0],
-      code: verificationCode,
-    });
+    logger.info('[AUTH] Register — user created', { userId: user.id.split('-')[0] });
+    logCodeForDev('verification', email, verificationCode);
 
-    const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
-        <h2 style="color: #0D2B45;">Bienvenido a Lifty</h2>
-        <p style="color: #A8B1BA; font-size: 16px;">Tu codigo de verificacion es:</p>
-        <div style="background: #F1F4F6; border-radius: 8px; padding: 24px; text-align: center; margin: 24px 0;">
-          <span style="font-size: 32px; font-weight: bold; color: #0D2B45; letter-spacing: 8px;">${verificationCode}</span>
-        </div>
-        <p style="color: #A8B1BA; font-size: 14px;">Este codigo expira en 1 hora.</p>
-      </div>
-    `;
+    const emailHtml = codeEmailHtml(
+      'Bienvenido a Lifty',
+      verificationCode,
+      'Este codigo expira en 1 hora.',
+    );
 
     const sent = await sendEmail(email, 'Verifica tu cuenta de Lifty', emailHtml);
     logger.info('[AUTH] Register — email sent', { email, sent });
@@ -73,7 +104,8 @@ export const authService = {
     };
   },
 
-  async verifyEmail(email: string, code: string) {
+  async verifyEmail(rawEmail: string, code: string) {
+    const email = normalizeEmail(rawEmail);
     const [user] = await db
       .select({
         id: users.id,
@@ -82,6 +114,7 @@ export const authService = {
         email_verified: users.email_verified,
         verification_code: users.verification_code,
         verification_code_expires_at: users.verification_code_expires_at,
+        verification_attempts: users.verification_attempts,
       })
       .from(users)
       .where(eq(users.email, email))
@@ -95,12 +128,24 @@ export const authService = {
       return { message: 'El email ya fue verificado', alreadyVerified: true };
     }
 
-    if (user.verification_code !== code) {
-      throw new BadRequestError('Codigo de verificacion invalido');
+    if (
+      !user.verification_code ||
+      !user.verification_code_expires_at ||
+      user.verification_code_expires_at < new Date()
+    ) {
+      throw new BadRequestError('El codigo expiro. Solicita uno nuevo.');
     }
 
-    if (!user.verification_code_expires_at || user.verification_code_expires_at < new Date()) {
-      throw new BadRequestError('El codigo expiro. Solicita uno nuevo.');
+    if (user.verification_attempts >= MAX_CODE_ATTEMPTS) {
+      throw new BadRequestError('Demasiados intentos. Solicita un nuevo codigo.');
+    }
+
+    if (user.verification_code !== code) {
+      await db
+        .update(users)
+        .set({ verification_attempts: user.verification_attempts + 1 })
+        .where(eq(users.id, user.id));
+      throw new BadRequestError('Codigo de verificacion invalido');
     }
 
     await db
@@ -109,6 +154,7 @@ export const authService = {
         email_verified: true,
         verification_code: null,
         verification_code_expires_at: null,
+        verification_attempts: 0,
       })
       .where(eq(users.id, user.id));
 
@@ -117,7 +163,152 @@ export const authService = {
     return { message: 'Email verificado correctamente' };
   },
 
-  async login(email: string, password: string) {
+  async resendCode(rawEmail: string) {
+    const email = normalizeEmail(rawEmail);
+    const genericResponse = {
+      message: 'Si existe una cuenta pendiente de verificacion, enviamos un nuevo codigo.',
+    };
+
+    const [user] = await db
+      .select({
+        id: users.id,
+        email_verified: users.email_verified,
+        verification_code_expires_at: users.verification_code_expires_at,
+      })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    if (!user || user.email_verified) {
+      return genericResponse;
+    }
+
+    if (issuedLessThanCooldownAgo(user.verification_code_expires_at, VERIFICATION_CODE_MINUTES)) {
+      throw new TooManyRequestsError('Espera un minuto antes de pedir otro codigo.');
+    }
+
+    const verificationCode = generateCode();
+    await db
+      .update(users)
+      .set({
+        verification_code: verificationCode,
+        verification_code_expires_at: new Date(Date.now() + VERIFICATION_CODE_MINUTES * 60 * 1000),
+        verification_attempts: 0,
+      })
+      .where(eq(users.id, user.id));
+
+    const sent = await sendEmail(
+      email,
+      'Tu nuevo codigo de verificacion de Lifty',
+      codeEmailHtml('Verifica tu cuenta', verificationCode, 'Este codigo expira en 1 hora.'),
+    );
+    logger.info('[AUTH] Verification code resent', { userId: user.id.split('-')[0], sent });
+    logCodeForDev('verification', email, verificationCode);
+
+    return genericResponse;
+  },
+
+  async forgotPassword(rawEmail: string) {
+    const email = normalizeEmail(rawEmail);
+    const genericResponse = {
+      message:
+        'Si existe una cuenta con ese email, enviamos un codigo para restablecer la contrasena.',
+    };
+
+    const [user] = await db
+      .select({ id: users.id, reset_code_expires_at: users.reset_code_expires_at })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    if (!user) {
+      return genericResponse;
+    }
+
+    if (issuedLessThanCooldownAgo(user.reset_code_expires_at, RESET_CODE_MINUTES)) {
+      throw new TooManyRequestsError('Espera un minuto antes de pedir otro codigo.');
+    }
+
+    const resetCode = generateCode();
+    await db
+      .update(users)
+      .set({
+        reset_code: resetCode,
+        reset_code_expires_at: new Date(Date.now() + RESET_CODE_MINUTES * 60 * 1000),
+        reset_attempts: 0,
+      })
+      .where(eq(users.id, user.id));
+
+    const sent = await sendEmail(
+      email,
+      'Restablece tu contrasena de Lifty',
+      codeEmailHtml('Restablece tu contrasena', resetCode, 'Este codigo expira en 15 minutos.'),
+    );
+    logger.info('[AUTH] Password reset code sent', { userId: user.id.split('-')[0], sent });
+    logCodeForDev('reset', email, resetCode);
+
+    return genericResponse;
+  },
+
+  async resetPassword(rawEmail: string, code: string, newPassword: string) {
+    const email = normalizeEmail(rawEmail);
+    const [user] = await db
+      .select({
+        id: users.id,
+        reset_code: users.reset_code,
+        reset_code_expires_at: users.reset_code_expires_at,
+        reset_attempts: users.reset_attempts,
+      })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    // Same message for unknown email, expired code, or missing code:
+    // this endpoint must not confirm whether an account exists.
+    const invalidError = new BadRequestError('Codigo invalido o expirado. Solicita uno nuevo.');
+
+    if (!user || !user.reset_code || !user.reset_code_expires_at) {
+      throw invalidError;
+    }
+
+    if (user.reset_code_expires_at < new Date()) {
+      throw invalidError;
+    }
+
+    if (user.reset_attempts >= MAX_CODE_ATTEMPTS) {
+      throw new BadRequestError('Demasiados intentos. Solicita un nuevo codigo.');
+    }
+
+    if (user.reset_code !== code) {
+      await db
+        .update(users)
+        .set({ reset_attempts: user.reset_attempts + 1 })
+        .where(eq(users.id, user.id));
+      throw invalidError;
+    }
+
+    const passwordHash = await Bun.password.hash(newPassword);
+    await db
+      .update(users)
+      .set({
+        password_hash: passwordHash,
+        reset_code: null,
+        reset_code_expires_at: null,
+        reset_attempts: 0,
+        updated_at: new Date(),
+      })
+      .where(eq(users.id, user.id));
+
+    // Changing the password invalidates every open session.
+    await db.delete(refreshTokens).where(eq(refreshTokens.user_id, user.id));
+
+    logger.info('[AUTH] Password reset', { userId: user.id.split('-')[0] });
+
+    return { message: 'Contrasena actualizada. Ya puedes iniciar sesion.' };
+  },
+
+  async login(rawEmail: string, password: string) {
+    const email = normalizeEmail(rawEmail);
     logger.info('[AUTH] Login attempt', { email });
 
     let user:

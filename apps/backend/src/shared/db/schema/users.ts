@@ -1,4 +1,4 @@
-import { boolean, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { boolean, integer, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -13,4 +13,8 @@ export const users = pgTable('users', {
   email_verified: boolean('email_verified').notNull().default(false),
   verification_code: varchar('verification_code', { length: 6 }),
   verification_code_expires_at: timestamp('verification_code_expires_at'),
+  verification_attempts: integer('verification_attempts').notNull().default(0),
+  reset_code: varchar('reset_code', { length: 6 }),
+  reset_code_expires_at: timestamp('reset_code_expires_at'),
+  reset_attempts: integer('reset_attempts').notNull().default(0),
 });

@@ -1,5 +1,5 @@
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = 'postgresql://lifty:lifty@localhost:5432/lifty_test';
+process.env.DATABASE_URL ??= 'postgresql://lifty:lifty@localhost:5432/lifty_test';
 process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
 import { SignJWT } from 'jose';

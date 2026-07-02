@@ -12,8 +12,6 @@ export function useSignUp() {
 }
 
 export function useVerifyEmail() {
-  const setTokens = useAuthStore((s) => s.setTokens);
-  const setDriverId = useAuthStore((s) => s.setDriverId);
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -21,8 +19,43 @@ export function useVerifyEmail() {
       const { data } = await apiClient.post('/auth/verify', { email, code });
       return data;
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries();
+    },
+  });
+}
+
+export function useResendCode() {
+  return useMutation({
+    mutationFn: async ({ email }: { email: string }) => {
+      const { data } = await apiClient.post('/auth/resend-code', { email });
+      return data as { message: string };
+    },
+  });
+}
+
+export function useForgotPassword() {
+  return useMutation({
+    mutationFn: async ({ email }: { email: string }) => {
+      const { data } = await apiClient.post('/auth/forgot-password', { email });
+      return data as { message: string };
+    },
+  });
+}
+
+export function useResetPassword() {
+  return useMutation({
+    mutationFn: async ({
+      email,
+      code,
+      password,
+    }: {
+      email: string;
+      code: string;
+      password: string;
+    }) => {
+      const { data } = await apiClient.post('/auth/reset-password', { email, code, password });
+      return data as { message: string };
     },
   });
 }
@@ -57,7 +90,7 @@ export function useRefreshToken() {
       const { data } = await apiClient.post('/auth/refresh', { refresh_token: refreshToken });
       return data as { access_token: string; refresh_token: string };
     },
-    onSuccess: (data, oldToken) => {
+    onSuccess: (data) => {
       setTokens(data.access_token, data.refresh_token);
     },
   });
