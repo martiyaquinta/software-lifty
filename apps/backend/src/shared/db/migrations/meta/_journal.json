@@ -78,6 +78,62 @@
       "when": 1782625000000,
       "tag": "0009_push_tokens_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782625100000,
+      "tag": "0010_push_tokens_withdrawals",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782625160000,
+      "tag": "0011_refresh_token_hash_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1782625220000,
+      "tag": "0012_add_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1782625280000,
+      "tag": "0013_monetary_double_precision",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1782625340000,
+      "tag": "0014_email_only_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1782625400000,
+      "tag": "0015_email_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1783003667674,
+      "tag": "0016_password_reset",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1783005917400,
+      "tag": "0017_payments_mp_unique",
+      "breakpoints": true
     }
   ]
 }

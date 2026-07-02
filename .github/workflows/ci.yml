@@ -4,27 +4,27 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.3.14'
-      - uses: actions/cache@v4
-        with:
-          path: .turbo
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - run: bun run lint
 
   typecheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -33,15 +33,16 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .turbo
-          key: turbo-${{ runner.os }}-${{ github.sha }}
+          key: turbo-typecheck-${{ runner.os }}-${{ github.sha }}
           restore-keys: |
-            turbo-${{ runner.os }}-
-      - run: bun install
+            turbo-typecheck-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
       - run: bun run typecheck
 
   test:
     needs: [lint, typecheck]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -52,7 +53,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U lifty"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -73,11 +74,18 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .turbo
-          key: turbo-${{ runner.os }}-${{ github.sha }}
+          key: turbo-test-${{ runner.os }}-${{ github.sha }}
           restore-keys: |
-            turbo-${{ runner.os }}-
-      - run: bun install
+            turbo-typecheck-${{ runner.os }}-${{ github.sha }}
+            turbo-test-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - run: bun run db:migrate
+        working-directory: apps/backend
+        env:
+          DATABASE_URL: postgresql://lifty:lifty@127.0.0.1:5432/lifty_test
       - run: bun run test
         env:
-          DATABASE_URL: postgresql://lifty:lifty@localhost:5432/lifty_test
+          DATABASE_URL: postgresql://lifty:lifty@127.0.0.1:5432/lifty_test
+          TEST_DATABASE_URL: postgresql://lifty:lifty@127.0.0.1:5432/lifty_test
+          REDIS_URL: redis://127.0.0.1:6379
           JWT_SECRET: test-jwt-secret-at-least-32-chars

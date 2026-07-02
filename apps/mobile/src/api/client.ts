@@ -8,13 +8,17 @@ function getApiUrl(): string {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
   if (envUrl) return envUrl;
 
+  // The backend may run on a non-default port (bun run setup picks a free
+  // one and writes it here) — the host is still auto-detected from Expo.
+  const port = process.env.EXPO_PUBLIC_API_PORT ?? '3000';
+
   const hostUri = Constants.expoConfig?.hostUri;
   if (hostUri) {
     const host = hostUri.split(':')[0];
-    if (host && !host.includes('ngrok')) return `http://${host}:3000/api`;
+    if (host && !host.includes('ngrok')) return `http://${host}:${port}/api`;
   }
 
-  return 'http://localhost:3000/api';
+  return `http://localhost:${port}/api`;
 }
 
 const API_URL = getApiUrl();
@@ -70,6 +74,12 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
+// A 401 from these endpoints is a definitive answer (bad credentials, bad
+// code, dead refresh token) — retrying with a refreshed access token makes
+// no sense. In particular, letting /auth/refresh re-enter the refresh flow
+// deadlocks the queue.
+const NO_REFRESH_PATHS = ['/auth/login', '/auth/register', '/auth/verify', '/auth/refresh'];
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
@@ -77,7 +87,9 @@ apiClient.interceptors.response.use(
       _retry?: boolean;
     };
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const skipRefresh = NO_REFRESH_PATHS.some((path) => originalRequest?.url?.includes(path));
+
+    if (error.response?.status === 401 && !originalRequest._retry && !skipRefresh) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({

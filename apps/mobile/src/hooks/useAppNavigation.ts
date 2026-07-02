@@ -6,6 +6,7 @@ const SCREEN_TO_ROUTE: Record<string, string> = {
   LoginPhone: '/login-phone',
   LoginOTP: '/login-otp',
   LoginCredentials: '/login-credentials',
+  ForgotPassword: '/forgot-password',
   Terms: '/terms',
   OnboardingStep1: '/onboarding-step1',
   OnboardingStep2: '/onboarding-step2',

@@ -1,7 +1,14 @@
 import { Elysia } from 'elysia';
 import { logger } from '../../shared/lib/logger';
 import { safeCall } from '../../shared/lib/route-utils';
-import { loginBody, refreshBody, registerBody, verifyEmailBody } from './schema';
+import {
+  emailOnlyBody,
+  loginBody,
+  refreshBody,
+  registerBody,
+  resetPasswordBody,
+  verifyEmailBody,
+} from './schema';
 import { authService } from './service';
 
 export const authRoutes = new Elysia({ prefix: '/auth' })
@@ -23,6 +30,36 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     },
     {
       body: verifyEmailBody,
+    },
+  )
+  .post(
+    '/resend-code',
+    ({ body, set }) => {
+      logger.info('[AUTH:ROUTE] POST /auth/resend-code', { email: body.email });
+      return safeCall(() => authService.resendCode(body.email), set);
+    },
+    {
+      body: emailOnlyBody,
+    },
+  )
+  .post(
+    '/forgot-password',
+    ({ body, set }) => {
+      logger.info('[AUTH:ROUTE] POST /auth/forgot-password', { email: body.email });
+      return safeCall(() => authService.forgotPassword(body.email), set);
+    },
+    {
+      body: emailOnlyBody,
+    },
+  )
+  .post(
+    '/reset-password',
+    ({ body, set }) => {
+      logger.info('[AUTH:ROUTE] POST /auth/reset-password', { email: body.email });
+      return safeCall(() => authService.resetPassword(body.email, body.code, body.password), set);
+    },
+    {
+      body: resetPasswordBody,
     },
   )
   .post(

@@ -19,6 +19,13 @@ export const driversRoutes = new Elysia({ prefix: '/drivers' })
     }
     return safeCall(() => driversService.getMyProfile(user), set);
   })
+  .get('/me/status', ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+    return safeCall(() => driversService.getMyStatus(user), set);
+  })
   .put(
     '/me/online',
     ({ user, body, set }) => {

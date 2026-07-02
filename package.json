@@ -3,9 +3,10 @@
   "private": true,
   "workspaces": ["apps/*"],
   "scripts": {
+    "setup": "bun run --cwd apps/backend setup",
     "dev": "turbo dev",
     "build": "turbo build",
-    "test": "turbo test",
+    "test": "turbo test --filter=@lifty/backend",
     "typecheck": "turbo typecheck",
     "lint": "biome check .",
     "format": "biome format --write .",
@@ -19,5 +20,5 @@
     "lefthook": "^2.1.9",
     "turbo": "^2.4.0"
   },
-  "packageManager": "bun@1.2.9"
+  "packageManager": "bun@1.3.14"
 }

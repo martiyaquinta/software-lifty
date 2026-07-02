@@ -14,7 +14,7 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { OTPInput } from '../components/OTPInput';
 import { useAppNavigation } from '../hooks/useAppNavigation';
-import { useSignUp, useVerifyEmail } from '../hooks/useAuth';
+import { useResendCode, useSignUp, useVerifyEmail } from '../hooks/useAuth';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
 
@@ -27,11 +27,13 @@ export const RegisterScreen: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [step, setStep] = useState<'form' | 'verify'>('form');
   const [verificationCode, setVerificationCode] = useState('');
 
   const signUp = useSignUp();
   const verifyEmail = useVerifyEmail();
+  const resendCode = useResendCode();
 
   const passwordMatch =
     password.length > 0 && confirmPassword.length > 0 && password === confirmPassword;
@@ -62,9 +64,22 @@ export const RegisterScreen: React.FC = () => {
     }
   };
 
+  const handleResendCode = async () => {
+    setError(null);
+    setInfo(null);
+    try {
+      await resendCode.mutateAsync({ email: email.trim() });
+      setInfo('Te enviamos un nuevo codigo');
+    } catch (err: any) {
+      const message = err?.message ?? 'Error al reenviar el codigo';
+      setError(message);
+    }
+  };
+
   const handleVerify = async () => {
     if (verificationCode.length !== 6) return;
     setError(null);
+    setInfo(null);
 
     try {
       await verifyEmail.mutateAsync({ email: email.trim(), code: verificationCode });
@@ -97,6 +112,7 @@ export const RegisterScreen: React.FC = () => {
           <OTPInput length={6} value={verificationCode} onChange={setVerificationCode} />
           <View style={{ height: 16 }} />
           {error !== null && <Text style={styles.errorText}>{error}</Text>}
+          {info !== null && <Text style={styles.infoText}>{info}</Text>}
           <Button
             title={
               verificationCode.length === 6 && !verifyEmail.isPending
@@ -112,6 +128,9 @@ export const RegisterScreen: React.FC = () => {
             disabled={verificationCode.length !== 6 && verificationCode.length > 0}
             style={styles.button}
           />
+          <TouchableOpacity onPress={handleResendCode} disabled={resendCode.isPending}>
+            <Text style={styles.resendLink}>Reenviar codigo</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -267,6 +286,18 @@ const styles = StyleSheet.create({
     color: theme.colors.dangerRed,
     marginTop: theme.spacing.sm,
     textAlign: 'center',
+  },
+  infoText: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.turquoise,
+    marginTop: theme.spacing.sm,
+    textAlign: 'center',
+  },
+  resendLink: {
+    fontSize: theme.fontSize.md,
+    color: theme.colors.deepBlue,
+    textAlign: 'center',
+    marginTop: theme.spacing.lg,
   },
   loginLink: {
     fontSize: theme.fontSize.md,
