@@ -1,5 +1,5 @@
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL ??= 'postgresql://lifty:lifty@localhost:5432/lifty_test';
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
 process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
@@ -124,8 +124,8 @@ describe('Onboarding', () => {
     );
 
     expect(status).toBe(404);
-    expect(data.error).toBe('NOT_FOUND');
-    expect(data.message).toBe('Driver profile not found. Complete step 1 first');
+    expect(data.error.code).toBe('NOT_FOUND');
+    expect(data.error.message).toBe('Driver profile not found. Complete step 1 first');
   });
 
   test('step3 uploads documents', async () => {
@@ -184,8 +184,8 @@ describe('Onboarding', () => {
     );
 
     expect(status).toBe(400);
-    expect(data.error).toBe('BAD_REQUEST');
-    expect(data.message).toBe('Invalid doc_type: invalid_type');
+    expect(data.error.code).toBe('BAD_REQUEST');
+    expect(data.error.message).toBe('Invalid doc_type: invalid_type');
   });
 
   test('status returns current step and info', async () => {

@@ -1,5 +1,5 @@
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL ??= 'postgresql://lifty:lifty@localhost:5432/lifty_test';
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
 process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
@@ -37,8 +37,19 @@ async function registerAndGetToken(phone: string, _password: string): Promise<st
   return createTestToken(user.id, 'driver');
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   app = createApp();
+  // Self-seed: districts normally come from migration 0007 / db:seed,
+  // but the test DB may have been created via drizzle-kit push (no data).
+  const db = getDb();
+  const existing: any = await db.execute('SELECT count(*) AS count FROM districts');
+  if (Number(existing.rows[0]?.count ?? 0) === 0) {
+    await db.execute(`
+      INSERT INTO "districts" (name, province, status) VALUES
+        ('Villa Dolores', 'Córdoba', 'active'),
+        ('Mina Clavero', 'Córdoba', 'active')
+    `);
+  }
 });
 
 beforeEach(async () => {

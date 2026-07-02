@@ -3,9 +3,10 @@
   "private": true,
   "workspaces": ["apps/*"],
   "scripts": {
+    "setup": "bun run --cwd apps/backend setup",
     "dev": "turbo dev",
     "build": "turbo build",
-    "test": "turbo test",
+    "test": "turbo test --filter=@lifty/backend",
     "typecheck": "turbo typecheck",
     "lint": "biome check .",
     "format": "biome format --write .",

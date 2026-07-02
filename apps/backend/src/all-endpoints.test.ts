@@ -4,7 +4,7 @@
  * Run: bun test src/all-endpoints.test.ts
  */
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL ??= 'postgresql://lifty:lifty@localhost:5432/lifty_test';
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
 process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';

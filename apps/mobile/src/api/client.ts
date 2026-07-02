@@ -8,13 +8,17 @@ function getApiUrl(): string {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
   if (envUrl) return envUrl;
 
+  // The backend may run on a non-default port (bun run setup picks a free
+  // one and writes it here) — the host is still auto-detected from Expo.
+  const port = process.env.EXPO_PUBLIC_API_PORT ?? '3000';
+
   const hostUri = Constants.expoConfig?.hostUri;
   if (hostUri) {
     const host = hostUri.split(':')[0];
-    if (host && !host.includes('ngrok')) return `http://${host}:3000/api`;
+    if (host && !host.includes('ngrok')) return `http://${host}:${port}/api`;
   }
 
-  return 'http://localhost:3000/api';
+  return `http://localhost:${port}/api`;
 }
 
 const API_URL = getApiUrl();

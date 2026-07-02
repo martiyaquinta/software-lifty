@@ -1,5 +1,5 @@
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL ??= 'postgresql://lifty:lifty@localhost:5432/lifty_test';
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
 process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
@@ -112,8 +112,8 @@ describe('KYC', () => {
     );
 
     expect(status).toBe(404);
-    expect(data.error).toBe('NOT_FOUND');
-    expect(data.message).toBe('Driver not found or does not belong to you');
+    expect(data.error.code).toBe('NOT_FOUND');
+    expect(data.error.message).toBe('Driver not found or does not belong to you');
   });
 
   test('POST /webhook updates kyc status to in_progress', async () => {
@@ -202,8 +202,8 @@ describe('KYC', () => {
     );
 
     expect(status).toBe(400);
-    expect(data.error).toBe('BAD_REQUEST');
-    expect(data.message).toBe('Invalid status: bogus');
+    expect(data.error.code).toBe('BAD_REQUEST');
+    expect(data.error.message).toBe('Invalid status: bogus');
   });
 
   test('POST /webhook rejects transition from approved back to pending', async () => {
@@ -222,7 +222,7 @@ describe('KYC', () => {
     );
 
     expect(status).toBe(400);
-    expect(data.error).toBe('BAD_REQUEST');
-    expect(data.message).toBe('Invalid status transition from approved to pending');
+    expect(data.error.code).toBe('BAD_REQUEST');
+    expect(data.error.message).toBe('Invalid status transition from approved to pending');
   });
 });

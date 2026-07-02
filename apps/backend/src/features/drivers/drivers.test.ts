@@ -1,5 +1,5 @@
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL ??= 'postgresql://lifty:lifty@localhost:5432/lifty_test';
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
 process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
@@ -102,8 +102,8 @@ describe('Driver Profile', () => {
     );
 
     expect(status).toBe(404);
-    expect(data.error).toBe('NOT_FOUND');
-    expect(data.message).toBe('Driver not found');
+    expect(data.error.code).toBe('NOT_FOUND');
+    expect(data.error.message).toBe('Driver not found');
   });
 
   test('GET /:id/profile without auth works (public endpoint)', async () => {
@@ -223,7 +223,7 @@ describe('Driver Profile', () => {
       token,
     );
     expect(status).toBe(404);
-    expect(data.message).toContain('Onboarding');
+    expect(data.error.message).toContain('Onboarding');
   });
 
   test('GET /me includes vehicle data', async () => {

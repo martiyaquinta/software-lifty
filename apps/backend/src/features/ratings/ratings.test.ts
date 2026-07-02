@@ -1,5 +1,5 @@
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL ??= 'postgresql://lifty:lifty@localhost:5432/lifty_test';
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
 process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
@@ -136,8 +136,8 @@ describe('Ratings', () => {
     );
 
     expect(status).toBe(404);
-    expect(data.error).toBe('NOT_FOUND');
-    expect(data.message).toBe('Trip not found');
+    expect(data.error.code).toBe('NOT_FOUND');
+    expect(data.error.message).toBe('Trip not found');
   });
 
   test('POST rate trip not in completed status returns error', async () => {
@@ -164,8 +164,8 @@ describe('Ratings', () => {
     );
 
     expect(status).toBe(400);
-    expect(data.error).toBe('BAD_REQUEST');
-    expect(data.message).toBe('Trip is not in completed status');
+    expect(data.error.code).toBe('BAD_REQUEST');
+    expect(data.error.message).toBe('Trip is not in completed status');
   });
 
   test('POST rate duplicate returns error', async () => {
@@ -186,8 +186,8 @@ describe('Ratings', () => {
     );
 
     expect(status).toBe(409);
-    expect(data.error).toBe('CONFLICT');
-    expect(data.message).toBe('Rating already exists for this trip');
+    expect(data.error.code).toBe('CONFLICT');
+    expect(data.error.message).toBe('Rating already exists for this trip');
   });
 
   test('POST rate with invalid rating returns error', async () => {
