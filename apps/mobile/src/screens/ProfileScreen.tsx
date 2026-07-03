@@ -4,16 +4,22 @@ import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { TabBar } from '../components/TabBar';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { useSignOut } from '../hooks/useAuth';
 import { theme } from '../theme';
 
 export const ProfileScreen: React.FC = () => {
   const navigation = useAppNavigation();
+  const signOut = useSignOut();
   const [activeTab, setActiveTab] = React.useState<'home' | 'earnings' | 'profile'>('profile');
 
   const handleTabPress = (tab: 'home' | 'earnings' | 'profile') => {
     setActiveTab(tab);
     if (tab === 'home') navigation.navigate('Online');
     if (tab === 'earnings') navigation.navigate('Earnings');
+  };
+
+  const handleSignOut = () => {
+    signOut.mutate();
   };
 
   return (
@@ -54,7 +60,7 @@ export const ProfileScreen: React.FC = () => {
         <Button
           title="Cerrar sesion"
           variant="danger"
-          onPress={() => navigation.navigate('Welcome')}
+          onPress={handleSignOut}
           style={styles.button}
           textStyle={{ color: theme.colors.dangerRed, fontWeight: theme.fontWeight.medium }}
         />
