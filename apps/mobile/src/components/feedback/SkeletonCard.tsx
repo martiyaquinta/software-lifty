@@ -1,9 +1,13 @@
 import type React from 'react';
 import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
+import { Animated, StyleSheet, View, type ViewStyle } from 'react-native';
 import { theme } from '../../theme';
 
-export const SkeletonCard: React.FC = () => {
+interface SkeletonCardProps {
+  style?: ViewStyle;
+}
+
+export const SkeletonCard: React.FC<SkeletonCardProps> = ({ style }) => {
   const pulse = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
@@ -26,7 +30,7 @@ export const SkeletonCard: React.FC = () => {
   }, [pulse]);
 
   return (
-    <Animated.View style={[styles.container, { opacity: pulse }]}>
+    <Animated.View style={[styles.container, { opacity: pulse }, style]}>
       <View style={styles.line} />
       <View style={[styles.line, styles.lineShort]} />
       <View style={[styles.line, styles.lineShort]} />

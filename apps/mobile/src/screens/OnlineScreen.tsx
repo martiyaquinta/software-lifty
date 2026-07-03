@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { useCallback, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiClient, getValidated } from '../api/client';
 import { earningsDailySchema } from '../api/types';
 import type { EarningsDaily } from '../api/types';
@@ -16,6 +17,7 @@ import { useOnlineStore } from '../store/onlineStore';
 import { theme } from '../theme';
 
 export const OnlineScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const navigation = useAppNavigation();
   const isOnline = useOnlineStore((s) => s.isOnline);
   const setOnline = useOnlineStore((s) => s.setOnline);
@@ -26,6 +28,7 @@ export const OnlineScreen: React.FC = () => {
   const {
     data: earnings,
     isLoading: earningsLoading,
+    isError: earningsIsError,
     error: earningsError,
     refetch: refetchEarnings,
   } = useQuery<EarningsDaily>({
@@ -75,18 +78,73 @@ export const OnlineScreen: React.FC = () => {
   const formatCurrency = (amount: number) =>
     `$${amount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  const renderEarningsCard = () => {
+    if (earningsLoading) {
+      return <SkeletonCard style={styles.earningsCard} />;
+    }
+
+    if (earningsIsError) {
+      const message =
+        earningsError instanceof Error ? earningsError.message : 'Error al cargar ganancias';
+      return (
+        <Card style={styles.earningsCard} padding={theme.spacing.lg}>
+          <Text style={styles.earningsLabel}>Ganaste hoy</Text>
+          <Text style={styles.earningsErrorText}>No se pudo cargar</Text>
+          <Text style={styles.earningsErrorDetail}>{message}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => refetchEarnings()}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.retryButtonText}>Reintentar</Text>
+          </TouchableOpacity>
+        </Card>
+      );
+    }
+
+    if (!earnings || earnings.total === 0) {
+      return (
+        <Card style={styles.earningsCard} padding={theme.spacing.lg}>
+          <Text style={styles.earningsLabel}>Ganaste hoy</Text>
+          <Text style={styles.earningsAmount}>$0</Text>
+          <Text style={styles.earningsSubtext}>Todavia no hiciste viajes hoy</Text>
+        </Card>
+      );
+    }
+
+    return (
+      <Card style={styles.earningsCard} padding={theme.spacing.lg}>
+        <Text style={styles.earningsLabel}>Ganaste hoy</Text>
+        <Text style={styles.earningsAmount}>{formatCurrency(earnings.total)}</Text>
+        <View style={styles.earningsBreakdown}>
+          <View style={styles.earningsBreakdownItem}>
+            <Text style={styles.breakdownLabel}>Efectivo</Text>
+            <Text style={styles.breakdownValue}>{formatCurrency(earnings.cash)}</Text>
+          </View>
+          <View style={styles.breakdownDivider} />
+          <View style={styles.earningsBreakdownItem}>
+            <Text style={styles.breakdownLabel}>Transferencia</Text>
+            <Text style={styles.breakdownValue}>{formatCurrency(earnings.transfer)}</Text>
+          </View>
+        </View>
+      </Card>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={theme.colors.deepBlue} />
-      <View style={styles.header}>
-        <Text style={styles.menuIcon}>☰</Text>
+      <View style={[styles.header, { paddingTop: insets.top }]}>
+        <TouchableOpacity style={styles.menuButton} activeOpacity={0.7}>
+          <Text style={styles.menuIcon}>☰</Text>
+        </TouchableOpacity>
         <View style={styles.headerRight}>
           {isOnline && showConnectedBadge && (
             <View style={styles.connectedBadge}>
               <Text style={styles.connectedBadgeText}>Conectado</Text>
             </View>
           )}
-          <TouchableOpacity style={styles.avatar}>
+          <TouchableOpacity style={styles.avatarButton} activeOpacity={0.7}>
             <Text style={styles.avatarText}>👤</Text>
           </TouchableOpacity>
         </View>
@@ -94,7 +152,9 @@ export const OnlineScreen: React.FC = () => {
 
       <View style={styles.main}>
         <View style={styles.toggleSection}>
-          <Text style={styles.statusLabel}>Estas {isOnline ? 'conectado' : 'desconectado'}</Text>
+          <Text style={[styles.statusLabel, isOnline ? styles.statusOnline : styles.statusOffline]}>
+            {isOnline ? 'Estas conectado' : 'Estas desconectado'}
+          </Text>
           <Toggle value={isOnline} onToggle={handleToggle} />
           {toggleError && <Text style={styles.errorText}>{toggleError}</Text>}
         </View>
@@ -103,38 +163,9 @@ export const OnlineScreen: React.FC = () => {
           <MapView followUserLocation />
         </View>
 
-        {earningsLoading ? (
-          <SkeletonCard />
-        ) : earningsError ? (
-          <Card style={styles.earningsCard} padding={theme.spacing.lg}>
-            <Text style={styles.earningsLabel}>Ganaste hoy</Text>
-            <Text style={styles.earningsError}>No se pudo cargar</Text>
-            <TouchableOpacity onPress={() => refetchEarnings()}>
-              <Text style={styles.retryText}>Reintentar</Text>
-            </TouchableOpacity>
-          </Card>
-        ) : earnings && earnings.total > 0 ? (
-          <Card style={styles.earningsCard} padding={theme.spacing.lg}>
-            <Text style={styles.earningsLabel}>Ganaste hoy</Text>
-            <Text style={styles.earningsAmount}>{formatCurrency(earnings.total)}</Text>
-            <View style={styles.earningsBreakdown}>
-              <Text style={styles.earningsBreakdownItem}>
-                Efectivo {formatCurrency(earnings.cash)}
-              </Text>
-              <Text style={styles.earningsBreakdownItem}>
-                Transferencia {formatCurrency(earnings.transfer)}
-              </Text>
-            </View>
-          </Card>
-        ) : (
-          <Card style={styles.earningsCard} padding={theme.spacing.lg}>
-            <Text style={styles.earningsLabel}>Ganaste hoy</Text>
-            <Text style={styles.earningsAmount}>$0</Text>
-            <Text style={styles.earningsSubtext}>Todavia no hiciste viajes hoy</Text>
-          </Card>
-        )}
+        {renderEarningsCard()}
 
-        <View style={{ flex: 1 }} />
+        <View style={styles.spacer} />
       </View>
 
       <TabBar activeTab={activeTab} onTabPress={handleTabPress} />
@@ -146,15 +177,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.lightGray,
-    gap: theme.spacing.lg,
   },
   header: {
-    height: 56,
     backgroundColor: theme.colors.deepBlue,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
+  },
+  menuButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuIcon: {
+    color: theme.colors.white,
+    fontSize: theme.fontSize.xl,
+    fontWeight: theme.fontWeight.bold,
   },
   headerRight: {
     flexDirection: 'row',
@@ -164,7 +205,7 @@ const styles = StyleSheet.create({
   connectedBadge: {
     backgroundColor: theme.colors.turquoise,
     borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.sm + 2,
     paddingVertical: 4,
   },
   connectedBadgeText: {
@@ -172,58 +213,61 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: theme.fontWeight.medium,
   },
-  menuIcon: {
-    color: theme.colors.white,
-    fontSize: theme.fontSize.xl,
-    fontWeight: theme.fontWeight.bold,
-  },
-  avatar: {
-    width: 36,
-    height: 36,
+  avatarButton: {
+    width: 44,
+    height: 44,
     borderRadius: theme.radius.full,
     backgroundColor: theme.colors.mediumGray,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
-    fontSize: 18,
+    fontSize: 20,
   },
   main: {
     flex: 1,
     alignItems: 'center',
     gap: theme.spacing.lg,
     paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.lg,
   },
   toggleSection: {
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    paddingTop: theme.spacing.lg,
+    gap: theme.spacing.sm + 2,
   },
   statusLabel: {
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
+  },
+  statusOnline: {
+    color: theme.colors.turquoise,
+  },
+  statusOffline: {
     color: theme.colors.mediumGray,
   },
   errorText: {
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.xs,
     color: theme.colors.dangerRed,
     textAlign: 'center',
   },
   mapContainer: {
-    width: 343,
-    height: 200,
+    width: '100%',
+    height: 240,
     borderRadius: theme.radius.lg,
     overflow: 'hidden',
+    backgroundColor: theme.colors.lightGray,
   },
   earningsCard: {
-    width: 343,
+    width: '100%',
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
   earningsLabel: {
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.xs,
     fontWeight: theme.fontWeight.medium,
-    color: theme.colors.deepBlue,
+    color: theme.colors.mediumGray,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   earningsAmount: {
     fontSize: theme.fontSize['4xl'],
@@ -233,6 +277,7 @@ const styles = StyleSheet.create({
   earningsBreakdown: {
     width: '100%',
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-around',
     marginTop: theme.spacing.sm,
     paddingTop: theme.spacing.sm,
@@ -240,21 +285,51 @@ const styles = StyleSheet.create({
     borderTopColor: theme.colors.lightGray,
   },
   earningsBreakdownItem: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  breakdownLabel: {
     fontSize: theme.fontSize.xs,
     color: theme.colors.mediumGray,
   },
-  earningsError: {
+  breakdownValue: {
     fontSize: theme.fontSize.md,
-    color: theme.colors.dangerRed,
-  },
-  retryText: {
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.turquoise,
     fontWeight: theme.fontWeight.medium,
-    marginTop: theme.spacing.sm,
+    color: theme.colors.deepBlue,
+  },
+  breakdownDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: theme.colors.lightGray,
+  },
+  earningsErrorText: {
+    fontSize: theme.fontSize.md,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.deepBlue,
+  },
+  earningsErrorDetail: {
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.mediumGray,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  retryButton: {
+    marginTop: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.radius.buttonRadius,
+    backgroundColor: theme.colors.deepBlue,
+  },
+  retryButtonText: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.white,
   },
   earningsSubtext: {
     fontSize: theme.fontSize.sm,
     color: theme.colors.mediumGray,
+  },
+  spacer: {
+    flex: 1,
   },
 });
