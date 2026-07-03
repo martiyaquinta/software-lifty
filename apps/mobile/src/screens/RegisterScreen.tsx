@@ -176,6 +176,9 @@ export const RegisterScreen: React.FC = () => {
               setError(null);
             }}
             secureTextEntry={!showPassword}
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="newPassword"
             containerStyle={styles.inputField}
           />
           <Input
@@ -186,6 +189,9 @@ export const RegisterScreen: React.FC = () => {
               setError(null);
             }}
             secureTextEntry={!showPassword}
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="password"
             containerStyle={styles.inputField}
           />
           <TouchableOpacity
