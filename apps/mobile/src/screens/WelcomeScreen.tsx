@@ -1,20 +1,11 @@
 import type React from 'react';
-import { useEffect } from 'react';
 import { StatusBar, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { useAppNavigation } from '../hooks/useAppNavigation';
-import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
 
 export const WelcomeScreen: React.FC = () => {
   const navigation = useAppNavigation();
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigation.replace('Online');
-    }
-  }, [isAuthenticated, navigation]);
 
   return (
     <View style={styles.container}>
