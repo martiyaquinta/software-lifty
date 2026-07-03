@@ -165,7 +165,7 @@ export const OnboardingStep1Screen: React.FC = () => {
         uploadedPhotoUrl = urlData.publicUrl;
       }
 
-      await apiClient.put('/drivers/me', {
+      const payload: Record<string, unknown> = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         vehicle_plate: vehiclePlate.trim().toUpperCase(),
@@ -174,8 +174,13 @@ export const OnboardingStep1Screen: React.FC = () => {
         vehicle_color: vehicleColor.trim(),
         vehicle_year: Number.parseInt(vehicleYear, 10),
         vehicle_type: vehicleType,
-        photo_url: uploadedPhotoUrl ?? null,
-      });
+      };
+
+      if (uploadedPhotoUrl) {
+        payload.photo_url = uploadedPhotoUrl;
+      }
+
+      await apiClient.put('/drivers/me', payload);
 
       navigation.navigate('OnboardingStep2');
     } catch (err: any) {
