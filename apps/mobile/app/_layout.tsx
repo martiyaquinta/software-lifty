@@ -3,7 +3,7 @@ import * as Notifications from 'expo-notifications';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { InteractionManager, StyleSheet, View } from 'react-native';
 import { apiClient } from '../src/api/client';
 import { driverStatusSchema } from '../src/api/types';
 import { ConnectivityBanner } from '../src/components/feedback/ConnectivityBanner';
@@ -18,8 +18,18 @@ import { queryClient } from '../src/lib/queryClient';
 import { useAuthStore } from '../src/store/authStore';
 import { theme } from '../src/theme';
 
+const PUBLIC_ROUTES = [
+  '',
+  'register',
+  'login-phone',
+  'login-otp',
+  'login-credentials',
+  'forgot-password',
+];
+
 function AuthRedirectWatcher() {
   const needsRedirect = useAuthStore((s) => s.needsRedirect);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const resetRedirect = useAuthStore((s) => s.resetRedirect);
   const router = useRouter();
   const segments = useSegments();
@@ -28,10 +38,20 @@ function AuthRedirectWatcher() {
     if (needsRedirect) {
       resetRedirect();
       if (segments[0] !== undefined) {
-        router.replace('/');
+        InteractionManager.runAfterInteractions(() => {
+          router.replace('/');
+        });
       }
     }
   }, [needsRedirect, resetRedirect, router, segments]);
+
+  useEffect(() => {
+    if (isAuthenticated && PUBLIC_ROUTES.includes(segments[0] ?? '')) {
+      InteractionManager.runAfterInteractions(() => {
+        router.replace('/online');
+      });
+    }
+  }, [isAuthenticated, segments, router]);
 
   return null;
 }
@@ -79,22 +99,24 @@ function ActiveTripRecovery() {
         const response = await apiClient.get('/trips/active');
         const trip = response.data?.data ?? response.data;
         if (trip) {
-          switch (trip.status) {
-            case 'accepted':
-              router.replace('/navigation');
-              break;
-            case 'driver_arrived':
-              router.replace('/waiting-passenger');
-              break;
-            case 'in_progress':
-              router.replace('/trip-in-progress');
-              break;
-            case 'requested':
-              router.replace('/incoming-request');
-              break;
-            default:
-              break;
-          }
+          InteractionManager.runAfterInteractions(() => {
+            switch (trip.status) {
+              case 'accepted':
+                router.replace('/navigation');
+                break;
+              case 'driver_arrived':
+                router.replace('/waiting-passenger');
+                break;
+              case 'in_progress':
+                router.replace('/trip-in-progress');
+                break;
+              case 'requested':
+                router.replace('/incoming-request');
+                break;
+              default:
+                break;
+            }
+          });
         }
       } catch {
         // no active trip or API error — stay on current screen
@@ -136,11 +158,6 @@ export default function RootLayout() {
       <ErrorBoundary>
         <View style={styles.root}>
           <StatusBar style="auto" />
-          <AuthRedirectWatcher />
-          <SessionRestore />
-          <ActiveTripRecovery />
-          <NotificationSetup />
-          <ConnectivityBanner />
           <Stack
             screenOptions={{
               headerShown: false,
@@ -148,6 +165,11 @@ export default function RootLayout() {
               contentStyle: { backgroundColor: theme.colors.white },
             }}
           />
+          <AuthRedirectWatcher />
+          <SessionRestore />
+          <ActiveTripRecovery />
+          <NotificationSetup />
+          <ConnectivityBanner />
         </View>
       </ErrorBoundary>
     </QueryClientProvider>
