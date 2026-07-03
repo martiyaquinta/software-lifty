@@ -40,11 +40,10 @@ export const LoginCredentialsScreen: React.FC = () => {
     }
 
     try {
-      const response = await apiClient.get('/drivers/me/status');
-      const parsed = driverStatusSchema.safeParse(response.data);
-      const status = parsed.success
-        ? parsed.data.status
-        : (response.data as { status?: string })?.status;
+      const { data: body } = await apiClient.get('/drivers/me/status');
+      const payload = body?.data ?? body;
+      const parsed = driverStatusSchema.safeParse(payload);
+      const status = parsed.success ? parsed.data.status : (payload as { status?: string })?.status;
 
       switch (status) {
         case 'under_review':
