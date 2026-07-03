@@ -1,5 +1,6 @@
 import type React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, TouchableOpacity } from 'react-native';
 import { theme } from '../theme';
 
 interface ToggleProps {
@@ -7,40 +8,55 @@ interface ToggleProps {
   onToggle: (value: boolean) => void;
 }
 
+const WIDTH = 52;
+const HEIGHT = 32;
+const PADDING = theme.spacing.xs;
+const THUMB_SIZE = 24;
+const TRAVEL = WIDTH - THUMB_SIZE - PADDING * 2;
+
 export const Toggle: React.FC<ToggleProps> = ({ value, onToggle }) => {
+  const translateX = useRef(new Animated.Value(value ? TRAVEL : 0)).current;
+
+  useEffect(() => {
+    Animated.spring(translateX, {
+      toValue: value ? TRAVEL : 0,
+      useNativeDriver: true,
+      stiffness: 300,
+      damping: 28,
+    }).start();
+  }, [value, translateX]);
+
+  const backgroundColor = translateX.interpolate({
+    inputRange: [0, TRAVEL],
+    outputRange: [theme.colors.mediumGray, theme.colors.turquoise],
+  });
+
   return (
-    <TouchableOpacity
-      style={[styles.container, value && styles.containerActive]}
-      onPress={() => onToggle(!value)}
-      activeOpacity={0.8}
-    >
-      <View style={[styles.thumb, value ? styles.thumbActive : styles.thumbInactive]} />
+    <TouchableOpacity onPress={() => onToggle(!value)} activeOpacity={0.9}>
+      <Animated.View style={[styles.container, { backgroundColor }]}>
+        <Animated.View style={[styles.thumb, { transform: [{ translateX }] }]} />
+      </Animated.View>
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    width: 52,
-    height: 32,
+    width: WIDTH,
+    height: HEIGHT,
     borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.mediumGray,
     justifyContent: 'center',
-    padding: theme.spacing.xs,
-  },
-  containerActive: {
-    backgroundColor: theme.colors.turquoise,
+    paddingHorizontal: PADDING,
   },
   thumb: {
-    width: 24,
-    height: 24,
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
     borderRadius: theme.radius.full,
     backgroundColor: theme.colors.white,
-  },
-  thumbActive: {
-    alignSelf: 'flex-end',
-  },
-  thumbInactive: {
-    alignSelf: 'flex-start',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
   },
 });
