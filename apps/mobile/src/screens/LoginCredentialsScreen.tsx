@@ -105,6 +105,9 @@ export const LoginCredentialsScreen: React.FC = () => {
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="password"
             containerStyle={styles.inputField}
           />
           <TouchableOpacity

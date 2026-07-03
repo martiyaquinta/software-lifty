@@ -158,6 +158,9 @@ export const ForgotPasswordScreen: React.FC = () => {
                   setError(null);
                 }}
                 secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="newPassword"
                 containerStyle={styles.inputField}
               />
               <Input
@@ -168,6 +171,9 @@ export const ForgotPasswordScreen: React.FC = () => {
                   setError(null);
                 }}
                 secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="password"
                 containerStyle={styles.inputField}
               />
               <TouchableOpacity
