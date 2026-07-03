@@ -7,3 +7,21 @@ export const driverIdParams = t.Object({
 export const toggleOnlineBody = t.Object({
   is_online: t.Boolean(),
 });
+
+export const updateProfileBody = t.Object({
+  first_name: t.Optional(t.String()),
+  last_name: t.Optional(t.String()),
+  vehicle_plate: t.Optional(t.String()),
+  vehicle_brand: t.Optional(t.String()),
+  vehicle_model: t.Optional(t.String()),
+  vehicle_color: t.Optional(t.String()),
+  vehicle_year: t.Optional(t.Number()),
+  vehicle_type: t.Optional(t.String()),
+  photo_url: t.Optional(t.String()),
+});
+
+export const addDocumentBody = t.Object({
+  doc_type: t.String(),
+  file_url: t.String(),
+  file_name: t.Optional(t.String()),
+});
