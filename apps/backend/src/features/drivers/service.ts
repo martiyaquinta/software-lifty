@@ -265,9 +265,7 @@ export const driversService = {
       .where(eq(drivers.user_id, user.id))
       .limit(1);
 
-    if (!driver) throw new NotFoundError('Driver profile not found. Complete step 1 first');
-
-    const path = `avatars/${driver.id}-${Date.now()}`;
+    const path = `avatars/${driver?.id ?? user.id}-${Date.now()}`;
     const fileUrl = await uploadFile(file, path);
 
     await db
@@ -276,6 +274,29 @@ export const driversService = {
       .where(eq(users.id, user.id));
 
     return { file_url: fileUrl };
+  },
+
+  async listDocuments(user: AuthUser) {
+    const [driver] = await db
+      .select({ id: drivers.id })
+      .from(drivers)
+      .where(eq(drivers.user_id, user.id))
+      .limit(1);
+
+    if (!driver) return [];
+
+    return db
+      .select({
+        id: driverDocuments.id,
+        doc_type: driverDocuments.doc_type,
+        file_url: driverDocuments.file_url,
+        verified_at: driverDocuments.verified_at,
+        expires_at: driverDocuments.expires_at,
+        created_at: driverDocuments.created_at,
+      })
+      .from(driverDocuments)
+      .where(eq(driverDocuments.driver_id, driver.id))
+      .orderBy(driverDocuments.created_at);
   },
 
   async getMyProfile(user: AuthUser) {
