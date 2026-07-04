@@ -89,14 +89,16 @@ export const earningsDailySchema = z.object({
   transfer: z.number(),
   trip_count: z.number(),
   trips: z.array(tripSchema).optional(),
+  yesterday: z.number().optional(),
+  week: z.number().optional(),
 });
 
 export const paymentMethodSchema = z.object({
   id: z.string(),
-  driver_id: z.string(),
-  cvu: z.string(),
-  alias: z.string().nullable(),
-  bank: z.string().nullable(),
+  method_type: z.string(),
+  account_number: z.string(),
+  titular_name: z.string().nullable(),
+  wallet: z.string().nullable(),
   created_at: z.string(),
 });
 

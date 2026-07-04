@@ -193,4 +193,25 @@ export const tripService = {
     const driverId = await getDriverId(user);
     return findTrip(driverId, tripId);
   },
+
+  async collectTrip(user: AuthUser, tripId: string) {
+    const driverId = await getDriverId(user);
+    const trip = await findTrip(driverId, tripId);
+
+    if (trip.status !== 'completed') {
+      throw new AppError('Trip must be completed before collecting payment', 400, 'BAD_REQUEST');
+    }
+
+    if (trip.is_collected) {
+      throw new AppError('Payment already collected for this trip', 400, 'BAD_REQUEST');
+    }
+
+    const [updated] = await db
+      .update(trips)
+      .set({ is_collected: true, updated_at: new Date() })
+      .where(eq(trips.id, tripId))
+      .returning();
+
+    return updated;
+  },
 };
