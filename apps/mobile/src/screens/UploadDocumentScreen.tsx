@@ -13,14 +13,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { apiClient } from '../api/client';
 import { Button } from '../components/Button';
 import { Navbar } from '../components/Navbar';
-import { supabase } from '../lib/supabase';
-import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+import { compressImage } from '../utils/image';
+import { uploadDocumentToBackend } from '../utils/upload';
 
 type DocType = 'drivers_license' | 'vehicle_registration' | 'vehicle_insurance';
 
@@ -37,7 +34,6 @@ export const UploadDocumentScreen: React.FC = () => {
     docLabel: string;
   }>();
   const router = useRouter();
-  const driverId = useAuthStore((s) => s.driverId);
 
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -58,10 +54,6 @@ export const UploadDocumentScreen: React.FC = () => {
 
     if (!result.canceled && result.assets.length > 0) {
       const asset = result.assets[0];
-      if (asset.fileSize && asset.fileSize > MAX_FILE_SIZE) {
-        Alert.alert('Archivo muy grande', 'El archivo no puede superar los 10 MB.');
-        return;
-      }
       setSelectedFile({
         uri: asset.uri,
         name: `photo-${Date.now()}.jpg`,
@@ -88,10 +80,6 @@ export const UploadDocumentScreen: React.FC = () => {
 
     if (!result.canceled && result.assets.length > 0) {
       const asset = result.assets[0];
-      if (asset.fileSize && asset.fileSize > MAX_FILE_SIZE) {
-        Alert.alert('Archivo muy grande', 'El archivo no puede superar los 10 MB.');
-        return;
-      }
       const extension = asset.uri.split('.').pop() || 'jpg';
       setSelectedFile({
         uri: asset.uri,
@@ -110,10 +98,6 @@ export const UploadDocumentScreen: React.FC = () => {
 
     if (!result.canceled && result.assets.length > 0) {
       const asset = result.assets[0];
-      if (asset.size && asset.size > MAX_FILE_SIZE) {
-        Alert.alert('Archivo muy grande', 'El archivo no puede superar los 10 MB.');
-        return;
-      }
       setSelectedFile({
         uri: asset.uri,
         name: asset.name,
@@ -124,40 +108,24 @@ export const UploadDocumentScreen: React.FC = () => {
   };
 
   const handleUpload = async () => {
-    if (!selectedFile || !driverId || !docType) return;
+    if (!selectedFile || !docType) return;
 
     setUploading(true);
     try {
-      const fileExtension = selectedFile.name.split('.').pop() || 'file';
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExtension}`;
-      const storagePath = `${driverId}/${docType}/${fileName}`;
+      let uploadUri = selectedFile.uri;
+      let uploadName = selectedFile.name;
+      let uploadMimeType = selectedFile.mimeType || 'application/octet-stream';
 
-      const response = await fetch(selectedFile.uri);
-      const blob = await response.blob();
-
-      const { error: uploadError } = await supabase.storage
-        .from('driver-documents')
-        .upload(storagePath, blob, {
-          contentType: selectedFile.mimeType || 'application/octet-stream',
-          upsert: false,
-        });
-
-      if (uploadError) {
-        console.error('Storage upload error:', uploadError);
-        Alert.alert('Error', 'No se pudo subir el archivo. Intenta de nuevo.');
-        return;
+      if (uploadMimeType.startsWith('image/')) {
+        try {
+          const compressed = await compressImage(uploadUri);
+          uploadUri = compressed.uri;
+          uploadName = uploadName.replace(/\.[^.]+$/, '.jpg');
+          uploadMimeType = 'image/jpeg';
+        } catch {}
       }
 
-      const { data: publicUrlData } = supabase.storage
-        .from('driver-documents')
-        .getPublicUrl(storagePath);
-
-      await apiClient.post('/drivers/me/documents', {
-        doc_type: docType,
-        file_name: selectedFile.name,
-        file_url: publicUrlData.publicUrl,
-      });
-
+      await uploadDocumentToBackend(uploadUri, uploadName, uploadMimeType, docType);
       router.back();
     } catch (err) {
       console.error('Upload error:', err);

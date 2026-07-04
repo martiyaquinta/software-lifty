@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
 import { driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
+import { uploadFile } from '../../shared/lib/storage';
 import type { AuthUser } from '../../shared/middleware/auth';
 
 const VALID_DOC_TYPES = [
@@ -255,6 +256,26 @@ export const driversService = {
     }
 
     return { message: 'Document uploaded', status: driver.status };
+  },
+
+  async uploadPhoto(user: AuthUser, file: File) {
+    const [driver] = await db
+      .select({ id: drivers.id })
+      .from(drivers)
+      .where(eq(drivers.user_id, user.id))
+      .limit(1);
+
+    if (!driver) throw new NotFoundError('Driver profile not found. Complete step 1 first');
+
+    const path = `avatars/${driver.id}-${Date.now()}`;
+    const fileUrl = await uploadFile(file, path);
+
+    await db
+      .update(users)
+      .set({ avatar_url: fileUrl, updated_at: new Date() })
+      .where(eq(users.id, user.id));
+
+    return { file_url: fileUrl };
   },
 
   async getMyProfile(user: AuthUser) {

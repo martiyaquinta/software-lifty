@@ -6,7 +6,15 @@ import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { uploadFile } from '../../shared/lib/storage';
 import type { AuthUser } from '../../shared/middleware/auth';
 
-const VALID_DOC_TYPES = ['license', 'registration', 'insurance', 'background_check'];
+const VALID_DOC_TYPES = [
+  'license',
+  'registration',
+  'insurance',
+  'background_check',
+  'drivers_license',
+  'vehicle_registration',
+  'vehicle_insurance',
+];
 
 async function getOrThrow(user: AuthUser) {
   const [driver] = await db.select().from(drivers).where(eq(drivers.user_id, user.id)).limit(1);

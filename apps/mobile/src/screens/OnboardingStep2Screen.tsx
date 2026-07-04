@@ -11,13 +11,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { apiClient } from '../api/client';
 import { Button } from '../components/Button';
 import { Navbar } from '../components/Navbar';
 import { useAppNavigation } from '../hooks/useAppNavigation';
-import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
+import { compressImage } from '../utils/image';
+import { uploadDocumentToBackend } from '../utils/upload';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -138,6 +138,22 @@ export const OnboardingStep2Screen: React.FC = () => {
           return;
         }
 
+        if (method === 'camera' || method === 'gallery') {
+          try {
+            const compressed = await compressImage(uri!);
+            uri = compressed.uri;
+            name = name?.replace(/\.[^.]+$/, '.jpg') ?? `photo_${Date.now()}.jpg`;
+            mimeType = 'image/jpeg';
+          } catch {}
+        } else if (mimeType?.startsWith('image/') && uri) {
+          try {
+            const compressed = await compressImage(uri);
+            uri = compressed.uri;
+            name = name?.replace(/\.[^.]+$/, '.jpg') ?? `doc_${Date.now()}.jpg`;
+            mimeType = 'image/jpeg';
+          } catch {}
+        }
+
         setDocs((prev) => ({
           ...prev,
           [docType]: {
@@ -149,36 +165,13 @@ export const OnboardingStep2Screen: React.FC = () => {
           },
         }));
 
-        const filePath = `${driverId}/${docType}/${name}`;
-        const response = await fetch(uri!);
-        const blob = await response.blob();
-
-        const { error: uploadError } = await supabase.storage
-          .from('driver-documents')
-          .upload(filePath, blob, {
-            contentType: mimeType!,
-            upsert: true,
-          });
-
-        if (uploadError) throw uploadError;
-
-        const { data: publicUrlData } = supabase.storage
-          .from('driver-documents')
-          .getPublicUrl(filePath);
-
-        const fileUrl = publicUrlData.publicUrl;
-
-        await apiClient.post('/drivers/me/documents', {
-          doc_type: docType,
-          file_url: fileUrl,
-          file_name: name,
-        });
+        const result = await uploadDocumentToBackend(uri!, name!, mimeType!, docType);
 
         setDocs((prev) => ({
           ...prev,
           [docType]: {
             ...prev[docType],
-            fileUrl,
+            fileUrl: result.file_url,
             uploading: false,
             uploaded: true,
             error: null,

@@ -1,5 +1,5 @@
 import { Elysia } from 'elysia';
-import { addDocumentBody, driverIdParams, toggleOnlineBody, updateProfileBody } from './schema';
+import { addDocumentBody, driverIdParams, toggleOnlineBody, updateProfileBody, uploadPhotoBody } from './schema';
 import { driversService } from './service';
 
 import { safeCall } from '../../shared/lib/route-utils';
@@ -58,4 +58,15 @@ export const driversRoutes = new Elysia({ prefix: '/drivers' })
       return safeCall(() => driversService.addDocument(user, body), set);
     },
     { body: addDocumentBody },
+  )
+  .post(
+    '/me/photo',
+    ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: 'Unauthorized' };
+      }
+      return safeCall(() => driversService.uploadPhoto(user, body.file), set);
+    },
+    { body: uploadPhotoBody },
   );

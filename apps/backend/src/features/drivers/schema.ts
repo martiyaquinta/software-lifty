@@ -25,3 +25,7 @@ export const addDocumentBody = t.Object({
   file_url: t.String(),
   file_name: t.Optional(t.String()),
 });
+
+export const uploadPhotoBody = t.Object({
+  file: t.File({ maxSize: 10 * 1024 * 1024 }),
+});
