@@ -74,16 +74,50 @@ export const authService = {
     const verificationCode = generateCode();
     const codeExpiresAt = new Date(Date.now() + VERIFICATION_CODE_MINUTES * 60 * 1000);
 
-    const [user] = await db
-      .insert(users)
-      .values({
+    const insertValues = {
+      email,
+      password_hash: passwordHash,
+      role: 'driver' as const,
+      verification_code: verificationCode,
+      verification_code_expires_at: codeExpiresAt,
+    };
+    logger.info('[AUTH] Register — INSERT values', {
+      email: insertValues.email,
+      role: insertValues.role,
+      hasPasswordHash: !!insertValues.password_hash,
+      hasVerificationCode: !!insertValues.verification_code,
+      codeExpiresAt: insertValues.verification_code_expires_at.toISOString(),
+    });
+
+    let user: { id: string; email: string | null } | undefined;
+    try {
+      const result = await db
+        .insert(users)
+        .values(insertValues)
+        .returning({ id: users.id, email: users.email });
+      user = result[0];
+    } catch (err: unknown) {
+      const pgErr = err as Record<string, unknown>;
+      logger.error('[AUTH] Register — INSERT failed', {
         email,
-        password_hash: passwordHash,
-        role: 'driver',
-        verification_code: verificationCode,
-        verification_code_expires_at: codeExpiresAt,
-      })
-      .returning({ id: users.id, email: users.email });
+        message: (err as Error)?.message,
+        code: pgErr?.code,
+        detail: pgErr?.detail,
+        constraint: pgErr?.constraint,
+        schema: pgErr?.schema,
+        table: pgErr?.table,
+        column: pgErr?.column,
+        routine: pgErr?.routine,
+        severity: pgErr?.severity,
+        stack: (err as Error)?.stack?.split('\n').slice(0, 5).join('\n'),
+      });
+      throw err;
+    }
+
+    if (!user) {
+      logger.error('[AUTH] Register — INSERT returned no rows', { email });
+      throw new Error('No se pudo crear la cuenta');
+    }
 
     logger.info('[AUTH] Register — user created', { userId: user.id.split('-')[0] });
     logCodeForDev('verification', email, verificationCode);

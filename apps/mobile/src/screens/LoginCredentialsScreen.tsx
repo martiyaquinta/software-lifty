@@ -3,7 +3,6 @@ import { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -62,74 +61,76 @@ export const LoginCredentialsScreen: React.FC = () => {
           setDriverStatus('approved');
           navigation.navigate('Online');
       }
-    } catch {
-      setDriverStatus('pending');
-      navigation.navigate('Terms');
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'No se pudo verificar el estado de tu cuenta';
+      setError(message);
     }
   };
 
   const isDisabled = !username || !password || login.isPending;
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Text style={styles.backText}>← Volver</Text>
         </TouchableOpacity>
       </View>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={{ height: 16 }} />
-          <Text style={styles.title}>Iniciar sesion</Text>
-          <Text style={styles.subtitle}>Ingresa tu email y contrasena</Text>
-          <View style={{ height: 8 }} />
-          <Input
-            placeholder="Email"
-            value={username}
-            onChangeText={setUsername}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            containerStyle={styles.inputField}
-          />
-          <Input
-            placeholder="Contrasena"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry={!showPassword}
-            autoCapitalize="none"
-            autoCorrect={false}
-            textContentType="password"
-            containerStyle={styles.inputField}
-          />
-          <TouchableOpacity
-            onPress={() => setShowPassword(!showPassword)}
-            style={styles.showPasswordRow}
-          >
-            <Text style={styles.showPasswordText}>{showPassword ? '🙈 Ocultar' : '👁 Mostrar'}</Text>
-          </TouchableOpacity>
-          <View style={{ height: 8 }} />
-          <Button
-            title="INICIAR SESION"
-            onPress={handleLogin}
-            loading={login.isPending}
-            disabled={isDisabled}
-            style={styles.button}
-          />
-          {error !== null && <Text style={styles.errorText}>{error}</Text>}
-          <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
-            <Text style={styles.forgotPassword}>Olvidaste tu contrasena?</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </View>
+
+      <View style={styles.content}>
+        <View style={styles.spacerTop} />
+        <Text style={styles.title}>Iniciar sesion</Text>
+        <View style={styles.gapMd} />
+        <Text style={styles.subtitle}>Ingresa tu email y contrasena</Text>
+        <View style={styles.spacer} />
+
+        <Input
+          placeholder="Email"
+          value={username}
+          onChangeText={setUsername}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          containerStyle={styles.inputField}
+        />
+        <View style={styles.gapMd} />
+        <Input
+          placeholder="Contrasena"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!showPassword}
+          autoCapitalize="none"
+          autoCorrect={false}
+          textContentType="password"
+          containerStyle={styles.inputField}
+          rightElement={
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} hitSlop={8}>
+              <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁'}</Text>
+            </TouchableOpacity>
+          }
+        />
+        <View style={styles.spacer} />
+
+        <Button
+          title="INICIAR SESION"
+          onPress={handleLogin}
+          loading={login.isPending}
+          disabled={isDisabled}
+          style={styles.button}
+        />
+        {error !== null && <Text style={styles.errorText}>{error}</Text>}
+        <View style={styles.gapMd} />
+        <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
+          <Text style={styles.forgotPassword}>Olvidaste tu contrasena?</Text>
+        </TouchableOpacity>
+
+        <View style={styles.filler} />
+      </View>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -138,15 +139,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.white,
   },
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    alignItems: 'center',
-    gap: theme.spacing.md,
-    paddingBottom: theme.spacing.xl,
-  },
   header: {
     height: theme.dimensions.navbarHeight,
     width: '100%',
@@ -154,10 +146,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: theme.spacing.md,
   },
+  backButton: {
+    paddingVertical: theme.spacing.sm,
+    paddingRight: theme.spacing.md,
+  },
   backText: {
     color: theme.colors.deepBlue,
     fontSize: theme.fontSize.md,
     fontWeight: theme.fontWeight.medium,
+  },
+  content: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.md,
+  },
+  spacerTop: {
+    height: 16,
+  },
+  gapMd: {
+    height: theme.spacing.md,
+  },
+  spacer: {
+    height: 8,
   },
   title: {
     fontSize: theme.fontSize['2xl'],
@@ -174,16 +184,7 @@ const styles = StyleSheet.create({
     width: 327,
   },
   eyeIcon: {
-    fontSize: 16,
-    color: theme.colors.mediumGray,
-  },
-  showPasswordRow: {
-    width: 327,
-    alignItems: 'flex-start',
-  },
-  showPasswordText: {
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.mediumGray,
+    fontSize: theme.fontSize.md,
   },
   button: {
     width: 327,
@@ -193,10 +194,14 @@ const styles = StyleSheet.create({
     color: theme.colors.dangerRed,
     width: 327,
     textAlign: 'center',
+    marginTop: theme.spacing.sm,
   },
   forgotPassword: {
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
     color: theme.colors.turquoise,
+  },
+  filler: {
+    flex: 1,
   },
 });

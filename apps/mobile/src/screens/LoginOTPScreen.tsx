@@ -1,7 +1,3 @@
-/**
- * @deprecated Email-only auth (feature 003). Phone auth removed from main flow.
- * This screen now works with email verification codes via Resend.
- */
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -103,18 +99,24 @@ export const LoginOTPScreen: React.FC = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Text style={styles.backText}>← Volver</Text>
         </TouchableOpacity>
       </View>
-      <View style={styles.spacer} />
+
+      <View style={styles.spacerTop} />
       <Text style={styles.title}>Ingresa el codigo</Text>
+      <View style={styles.gapMd} />
       <Text style={styles.subtitle}>
         {email
           ? `Te enviamos un codigo a ${displayEmail}`
           : 'Te enviamos un codigo de verificacion'}
       </Text>
+      <View style={styles.gapMd} />
+
       <OTPInput length={6} value={otp} onChange={setOtp} />
+      <View style={styles.gapMd} />
+
       <TouchableOpacity onPress={handleResend} disabled={cooldown > 0 || verifyEmail.isPending}>
         <Text
           style={[styles.resend, (cooldown > 0 || verifyEmail.isPending) && styles.resendDisabled]}
@@ -122,8 +124,9 @@ export const LoginOTPScreen: React.FC = () => {
           {cooldown > 0 ? `Reenviar en ${cooldown}s` : 'No te llego? Reenviar'}
         </Text>
       </TouchableOpacity>
+      <View style={styles.spacerBottom} />
+
       {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
-      <View style={styles.spacer} />
       <Button
         title="VERIFICAR CODIGO"
         onPress={handleVerify}
@@ -140,7 +143,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.white,
     alignItems: 'center',
-    gap: theme.spacing.md,
   },
   header: {
     height: theme.dimensions.navbarHeight,
@@ -149,14 +151,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: theme.spacing.md,
   },
+  backButton: {
+    paddingVertical: theme.spacing.sm,
+    paddingRight: theme.spacing.md,
+  },
   backText: {
     color: theme.colors.deepBlue,
     fontSize: theme.fontSize.lg,
-    fontWeight: theme.fontWeight.medium,
   },
-  spacer: {
+  spacerTop: {
+    height: 48,
+    width: 1,
+  },
+  spacerBottom: {
     height: 32,
     width: 1,
+  },
+  gapMd: {
+    height: theme.spacing.md,
   },
   title: {
     fontSize: theme.fontSize.xl,
@@ -166,6 +178,8 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: theme.fontSize.sm,
     color: theme.colors.mediumGray,
+    textAlign: 'center',
+    paddingHorizontal: theme.spacing.xl,
   },
   resend: {
     fontSize: theme.fontSize.sm,
@@ -179,6 +193,8 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     color: theme.colors.dangerRed,
     textAlign: 'center',
+    marginBottom: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xl,
   },
   button: {
     width: 327,
