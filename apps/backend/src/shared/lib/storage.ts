@@ -6,7 +6,7 @@ let supabase: ReturnType<typeof createClient> | null = null;
 function getClient() {
   if (!supabase) {
     const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_KEY;
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
     if (url && key) {
       supabase = createClient(url, key, {
         auth: { persistSession: false },
@@ -31,10 +31,8 @@ async function retry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 1000): Pro
 
 export async function uploadFile(file: File, path: string): Promise<string> {
   const client = getClient();
-  if (!client || process.env.NODE_ENV !== 'production') {
-    logger.info('[STORAGE] Upload:', path, `(${file.size} bytes)`);
-    return `mock://storage.lifty/${path}`;
-  }
+  if (!client)
+    throw new Error('Storage not configured: set SUPABASE_URL and SUPABASE_SERVICE_KEY in .env');
 
   const { data, error } = await retry(() =>
     client.storage.from('driver-documents').upload(path, file, { upsert: true }),
@@ -47,9 +45,8 @@ export async function uploadFile(file: File, path: string): Promise<string> {
 
 export async function getSignedUrl(path: string, expiresIn = 3600): Promise<string> {
   const client = getClient();
-  if (!client || process.env.NODE_ENV !== 'production') {
-    return `mock://storage.lifty/${path}`;
-  }
+  if (!client)
+    throw new Error('Storage not configured: set SUPABASE_URL and SUPABASE_SERVICE_KEY in .env');
 
   const { data, error } = await retry(() =>
     client.storage.from('driver-documents').createSignedUrl(path, expiresIn),
