@@ -4,7 +4,10 @@ import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-nativ
 import { apiClient } from '../api/client';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
+import { MapView } from '../components/MapView';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { stopTracking } from '../lib/location';
+import { useOnlineStore } from '../store/onlineStore';
 import { useTripStore } from '../store/tripStore';
 import { theme } from '../theme';
 
@@ -13,9 +16,17 @@ const MOCK_TRIP_ID = 'mock-trip-123';
 export const IncomingRequestScreen: React.FC = () => {
   const navigation = useAppNavigation();
   const { setActiveTrip } = useTripStore();
+  const setOnline = useOnlineStore((s) => s.setOnline);
   const [seconds, setSeconds] = useState(8);
   const [accepted, setAccepted] = useState(false);
   const timedOut = useRef(false);
+
+  const disconnect = () => {
+    const ref = useOnlineStore.getState().heartbeatIntervalRef;
+    if (ref) clearInterval(ref);
+    useOnlineStore.getState().setHeartbeatRef(null);
+    stopTracking();
+  };
 
   useEffect(() => {
     if (accepted || timedOut.current) return;
@@ -25,7 +36,7 @@ export const IncomingRequestScreen: React.FC = () => {
         .put(`/trips/${MOCK_TRIP_ID}/respond`, { action: 'timeout' })
         .catch(() => {})
         .finally(() => {
-          navigation.goBack();
+          navigation.navigate('Online');
         });
       return;
     }
@@ -54,50 +65,58 @@ export const IncomingRequestScreen: React.FC = () => {
     try {
       await apiClient.put(`/trips/${MOCK_TRIP_ID}/respond`, { action: 'reject' });
     } catch {}
+    try {
+      await apiClient.put('/drivers/me/online', { is_online: false });
+      setOnline(false);
+    } catch {}
+    disconnect();
     navigation.navigate('Online');
   };
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      <View style={styles.spacer} />
-      <Text style={styles.newRequest}>Nueva solicitud</Text>
+      <StatusBar barStyle="light-content" />
+      <MapView style={StyleSheet.absoluteFill as any} followUserLocation />
+      <View style={styles.overlay}>
+        <View style={styles.spacer} />
+        <Text style={styles.newRequest}>Nueva solicitud</Text>
 
-      <View style={styles.timerCircle}>
-        <Text style={styles.timerText}>{accepted ? '✓' : `0:0${seconds}`}</Text>
+        <View style={styles.timerCircle}>
+          <Text style={styles.timerText}>{accepted ? '✓' : `0:0${seconds}`}</Text>
+        </View>
+
+        <Card style={styles.routeCard}>
+          <View style={styles.routePoint}>
+            <Text style={styles.routeIconStart}>📍</Text>
+            <Text style={styles.routeText}>Av. San Martin 450</Text>
+          </View>
+          <View style={styles.routeLine}>
+            <Text style={styles.distanceText}>3.2 km</Text>
+          </View>
+          <View style={styles.routePoint}>
+            <Text style={styles.routeIconEnd}>📍</Text>
+            <Text style={styles.routeText}>Terminal de Omnibus</Text>
+          </View>
+        </Card>
+
+        <View style={{ height: theme.spacing.md }} />
+
+        <Text style={styles.earningsLabel}>Ganaras</Text>
+        <Text style={styles.earningsAmount}>$2.500</Text>
+
+        <View style={{ height: theme.spacing.lg }} />
+
+        {accepted ? (
+          <Text style={styles.acceptedText}>Viaje aceptado!</Text>
+        ) : (
+          <>
+            <Button title="ACEPTAR" variant="cta" onPress={handleAccept} style={styles.button} />
+            <TouchableOpacity onPress={handleReject}>
+              <Text style={styles.rejectLink}>Rechazar</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
-
-      <Card style={styles.routeCard}>
-        <View style={styles.routePoint}>
-          <Text style={styles.routeIconStart}>📍</Text>
-          <Text style={styles.routeText}>Av. San Martin 450</Text>
-        </View>
-        <View style={styles.routeLine}>
-          <Text style={styles.distanceText}>3.2 km</Text>
-        </View>
-        <View style={styles.routePoint}>
-          <Text style={styles.routeIconEnd}>📍</Text>
-          <Text style={styles.routeText}>Terminal de Omnibus</Text>
-        </View>
-      </Card>
-
-      <View style={{ height: theme.spacing.md }} />
-
-      <Text style={styles.earningsLabel}>Ganaras</Text>
-      <Text style={styles.earningsAmount}>$2.500</Text>
-
-      <View style={{ height: theme.spacing.lg }} />
-
-      {accepted ? (
-        <Text style={styles.acceptedText}>Viaje aceptado!</Text>
-      ) : (
-        <>
-          <Button title="ACEPTAR" variant="cta" onPress={handleAccept} style={styles.button} />
-          <TouchableOpacity onPress={handleReject}>
-            <Text style={styles.rejectLink}>Rechazar</Text>
-          </TouchableOpacity>
-        </>
-      )}
     </View>
   );
 };
@@ -105,7 +124,10 @@ export const IncomingRequestScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.white,
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
@@ -115,7 +137,7 @@ const styles = StyleSheet.create({
   newRequest: {
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
-    color: theme.colors.mediumGray,
+    color: theme.colors.white,
   },
   timerCircle: {
     width: 100,
@@ -129,7 +151,7 @@ const styles = StyleSheet.create({
   timerText: {
     fontSize: theme.fontSize.xl,
     fontWeight: theme.fontWeight.bold,
-    color: theme.colors.deepBlue,
+    color: theme.colors.white,
   },
   routeCard: {
     width: 310,
@@ -164,12 +186,12 @@ const styles = StyleSheet.create({
   earningsLabel: {
     fontSize: theme.fontSize.md,
     fontWeight: theme.fontWeight.medium,
-    color: theme.colors.mediumGray,
+    color: theme.colors.white,
   },
   earningsAmount: {
     fontSize: theme.fontSize['4xl'],
     fontWeight: theme.fontWeight.bold,
-    color: theme.colors.deepBlue,
+    color: theme.colors.white,
   },
   button: {
     width: 327,

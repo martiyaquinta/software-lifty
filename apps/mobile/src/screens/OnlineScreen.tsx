@@ -12,7 +12,7 @@ import { TabBar } from '../components/TabBar';
 import { Toggle } from '../components/Toggle';
 import { SkeletonCard } from '../components/feedback/SkeletonCard';
 import { useAppNavigation } from '../hooks/useAppNavigation';
-import { startTracking, stopTracking } from '../lib/location';
+import { stopTracking } from '../lib/location';
 import { useOnlineStore } from '../store/onlineStore';
 import { theme } from '../theme';
 
@@ -22,7 +22,6 @@ export const OnlineScreen: React.FC = () => {
   const isOnline = useOnlineStore((s) => s.isOnline);
   const setOnline = useOnlineStore((s) => s.setOnline);
   const [activeTab, setActiveTab] = useState<'home' | 'earnings' | 'profile'>('home');
-  const [showConnectedBadge, setShowConnectedBadge] = useState(false);
   const [toggleError, setToggleError] = useState<string | null>(null);
 
   const {
@@ -46,15 +45,7 @@ export const OnlineScreen: React.FC = () => {
         setOnline(newValue);
 
         if (newValue) {
-          setShowConnectedBadge(true);
-          setTimeout(() => setShowConnectedBadge(false), 2000);
-
-          startTracking();
-
-          const interval = setInterval(() => {
-            apiClient.put('/drivers/me/heartbeat').catch(() => {});
-          }, 30_000);
-          useOnlineStore.getState().setHeartbeatRef(interval);
+          navigation.replace('Active');
         } else {
           const ref = useOnlineStore.getState().heartbeatIntervalRef;
           if (ref) clearInterval(ref);
@@ -66,7 +57,7 @@ export const OnlineScreen: React.FC = () => {
         setToggleError(err instanceof Error ? err.message : 'Error al cambiar estado');
       }
     },
-    [setOnline],
+    [setOnline, navigation],
   );
 
   const handleTabPress = (tab: 'home' | 'earnings' | 'profile') => {
@@ -139,11 +130,6 @@ export const OnlineScreen: React.FC = () => {
           <Text style={styles.menuIcon}>☰</Text>
         </TouchableOpacity>
         <View style={styles.headerRight}>
-          {isOnline && showConnectedBadge && (
-            <View style={styles.connectedBadge}>
-              <Text style={styles.connectedBadgeText}>Conectado</Text>
-            </View>
-          )}
           <TouchableOpacity style={styles.avatarButton} activeOpacity={0.7}>
             <Text style={styles.avatarText}>👤</Text>
           </TouchableOpacity>
@@ -201,17 +187,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-  },
-  connectedBadge: {
-    backgroundColor: theme.colors.turquoise,
-    borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.sm + 2,
-    paddingVertical: 4,
-  },
-  connectedBadgeText: {
-    color: theme.colors.white,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.medium,
   },
   avatarButton: {
     width: 44,
