@@ -148,7 +148,14 @@ export const ProfileScreen: React.FC = () => {
         const compressed = await compressImage(editPhotoUri);
         const uploadResult = await uploadPhotoToBackend(compressed.uri, 'avatar.jpg', 'image/jpeg');
         photoUrl = uploadResult.file_url;
+        if (isRealUrl(photoUrl)) {
+          setProfile({ ...profile, avatar_url: photoUrl });
+        } else {
+          setProfile({ ...profile, avatar_url: editPhotoUri });
+        }
       }
+
+      const newFullName = `${editFirstName.trim()} ${editLastName.trim()}`.trim();
 
       await apiClient.put('/drivers/me', {
         first_name: editFirstName.trim(),
@@ -156,8 +163,9 @@ export const ProfileScreen: React.FC = () => {
         photo_url: photoUrl,
       });
 
+      setProfile({ ...profile, full_name: newFullName });
+
       setEditVisible(false);
-      await fetchData();
     } catch {
       Alert.alert('Error', 'No se pudo guardar el perfil.');
     } finally {
