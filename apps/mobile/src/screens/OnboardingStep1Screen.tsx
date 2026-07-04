@@ -16,9 +16,10 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Navbar } from '../components/Navbar';
 import { useAppNavigation } from '../hooks/useAppNavigation';
-import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
+import { compressImage } from '../utils/image';
+import { uploadPhotoToBackend } from '../utils/upload';
 
 type VehicleType = 'Auto' | 'Moto' | 'Camioneta';
 
@@ -129,7 +130,13 @@ export const OnboardingStep1Screen: React.FC = () => {
       quality: 0.8,
     });
     if (!result.canceled && result.assets.length > 0) {
-      setPhotoUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      try {
+        const compressed = await compressImage(asset.uri);
+        setPhotoUri(compressed.uri);
+      } catch {
+        setPhotoUri(asset.uri);
+      }
     }
   };
 
@@ -154,15 +161,12 @@ export const OnboardingStep1Screen: React.FC = () => {
       let uploadedPhotoUrl: string | null = null;
 
       if (photoUri) {
-        const response = await fetch(photoUri);
-        const blob = await response.blob();
-        const fileName = `avatars/${Date.now()}.jpg`;
-        const { error: uploadError } = await supabase.storage
-          .from('driver-documents')
-          .upload(fileName, blob, { upsert: true });
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from('driver-documents').getPublicUrl(fileName);
-        uploadedPhotoUrl = urlData.publicUrl;
+        try {
+          const result = await uploadPhotoToBackend(photoUri, 'avatar.jpg', 'image/jpeg');
+          uploadedPhotoUrl = result.file_url;
+        } catch (err) {
+          console.error('Photo upload error:', err);
+        }
       }
 
       const payload: Record<string, unknown> = {
