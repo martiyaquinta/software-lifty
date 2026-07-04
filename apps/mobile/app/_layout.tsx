@@ -18,14 +18,7 @@ import { queryClient } from '../src/lib/queryClient';
 import { useAuthStore } from '../src/store/authStore';
 import { theme } from '../src/theme';
 
-const PUBLIC_ROUTES = [
-  '',
-  'register',
-  'login-phone',
-  'login-otp',
-  'login-credentials',
-  'forgot-password',
-];
+const PUBLIC_ROUTES = ['', 'register', 'forgot-password'];
 
 function AuthRedirectWatcher() {
   const needsRedirect = useAuthStore((s) => s.needsRedirect);
