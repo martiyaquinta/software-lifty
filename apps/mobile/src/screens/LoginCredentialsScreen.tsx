@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { apiClient } from '../api/client';
+import type { DriverStatus } from '../api/types';
 import { driverStatusSchema } from '../api/types';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
@@ -17,6 +18,19 @@ import { useAppNavigation } from '../hooks/useAppNavigation';
 import { useLogin } from '../hooks/useAuth';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
+
+type DriverStatusValue = DriverStatus['status'] | null;
+
+const STATUS_ROUTE: Record<string, { screen: string; storeStatus: DriverStatusValue }> = {
+  'pending:step1': { screen: 'Terms', storeStatus: 'pending' },
+  'pending:step2': { screen: 'OnboardingStep1', storeStatus: 'pending' },
+  'pending:step3': { screen: 'OnboardingStep2', storeStatus: 'pending' },
+  pending: { screen: 'Terms', storeStatus: 'pending' },
+  under_review: { screen: 'UnderReview', storeStatus: 'under_review' },
+  approved: { screen: 'Online', storeStatus: 'approved' },
+  rejected: { screen: '', storeStatus: 'rejected' },
+  suspended: { screen: '', storeStatus: 'suspended' },
+};
 
 export const LoginCredentialsScreen: React.FC = () => {
   const navigation = useAppNavigation();
@@ -31,7 +45,8 @@ export const LoginCredentialsScreen: React.FC = () => {
   const handleLogin = async () => {
     setError(null);
     try {
-      await login.mutateAsync({ email: username.trim(), password });
+      const loginResult = await login.mutateAsync({ email: username.trim(), password });
+      console.log('[LoginCredentials] Login success, user:', loginResult.user?.id);
     } catch (err: any) {
       const message = err?.message ?? err?.response?.data?.message ?? 'Error al iniciar sesion';
       setError(message);
@@ -39,27 +54,33 @@ export const LoginCredentialsScreen: React.FC = () => {
     }
 
     try {
+      console.log('[LoginCredentials] Fetching /drivers/me/status...');
       const { data: body } = await apiClient.get('/drivers/me/status');
+      console.log('[LoginCredentials] /drivers/me/status response:', JSON.stringify(body));
       const payload = body?.data ?? body;
       const parsed = driverStatusSchema.safeParse(payload);
-      const status = parsed.success ? parsed.data.status : (payload as { status?: string })?.status;
+      const driverData = parsed.success ? parsed.data : (payload as DriverStatus);
+      const status = driverData.status;
+      const step = driverData.step;
+      console.log(
+        '[LoginCredentials] driverStatus:',
+        status,
+        '| step:',
+        step,
+        '| parsed success:',
+        parsed.success,
+        '| payload:',
+        JSON.stringify(payload),
+      );
 
-      switch (status) {
-        case 'under_review':
-          setDriverStatus('under_review');
-          navigation.navigate('UnderReview');
-          break;
-        case 'approved':
-          setDriverStatus('approved');
-          navigation.navigate('Online');
-          break;
-        case 'pending':
-          setDriverStatus('pending');
-          navigation.navigate('Terms');
-          break;
-        default:
-          setDriverStatus('approved');
-          navigation.navigate('Online');
+      const key = step ? `${status}:${step}` : status;
+      const route = STATUS_ROUTE[key] ?? STATUS_ROUTE.approved;
+
+      console.log('[LoginCredentials] route key:', key, '→ screen:', route.screen);
+      setDriverStatus(route.storeStatus);
+
+      if (route.screen) {
+        navigation.navigate(route.screen);
       }
     } catch (err: unknown) {
       const message =

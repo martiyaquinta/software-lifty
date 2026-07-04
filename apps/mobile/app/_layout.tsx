@@ -29,6 +29,11 @@ function AuthRedirectWatcher() {
 
   useEffect(() => {
     if (needsRedirect) {
+      console.log(
+        '[AuthRedirectWatcher] needsRedirect triggered, segments:',
+        segments[0],
+        '→ replacing to /',
+      );
       resetRedirect();
       if (segments[0] !== undefined) {
         InteractionManager.runAfterInteractions(() => {
@@ -39,7 +44,14 @@ function AuthRedirectWatcher() {
   }, [needsRedirect, resetRedirect, router, segments]);
 
   useEffect(() => {
+    console.log(
+      '[AuthRedirectWatcher] isAuthenticated:',
+      isAuthenticated,
+      '| segments[0]:',
+      segments[0],
+    );
     if (isAuthenticated && PUBLIC_ROUTES.includes(segments[0] ?? '')) {
+      console.log('[AuthRedirectWatcher] → redirecting to /online');
       InteractionManager.runAfterInteractions(() => {
         router.replace('/online');
       });
@@ -53,26 +65,36 @@ function SessionRestore() {
   useEffect(() => {
     const restore = async () => {
       const token = useAuthStore.getState().token;
+      console.log('[SessionRestore] token present:', !!token);
       if (!token) return;
 
       try {
         const response = await apiClient.get('/auth/me');
         const user = response.data;
         if (user?.id) {
+          console.log('[SessionRestore] auth/me returned user:', user.id);
           useAuthStore.getState().setDriverId(user.id);
         }
 
         try {
+          console.log('[SessionRestore] Fetching /drivers/me/status...');
           const statusRes = await apiClient.get('/drivers/me/status');
+          console.log(
+            '[SessionRestore] /drivers/me/status response:',
+            JSON.stringify(statusRes.data),
+          );
           const parsed = driverStatusSchema.safeParse(statusRes.data?.data ?? statusRes.data);
           if (parsed.success) {
+            console.log('[SessionRestore] setting driverStatus:', parsed.data.status);
             useAuthStore.getState().setDriverStatus(parsed.data.status);
+          } else {
+            console.log('[SessionRestore] parse failed, could not set driverStatus');
           }
-        } catch {
-          // driver may not exist yet
+        } catch (statusErr: any) {
+          console.log('[SessionRestore] /drivers/me/status ERROR:', statusErr?.message);
         }
-      } catch {
-        // token invalid or expired — app proceeds unauthenticated
+      } catch (err: any) {
+        console.log('[SessionRestore] /auth/me ERROR:', err?.message);
       }
     };
     restore();
