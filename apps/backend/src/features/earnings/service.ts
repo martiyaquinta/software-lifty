@@ -11,6 +11,64 @@ const monthStart = sql`date_trunc('month', CURRENT_DATE)`;
 const sevenDaysAgo = sql`CURRENT_DATE - INTERVAL '7 days'`;
 
 export const earningsService = {
+  async getDaily(user: AuthUser) {
+    const driverId = await getDriverId(user);
+
+    const todayTrips = await db
+      .select()
+      .from(trips)
+      .where(
+        and(
+          eq(trips.driver_id, driverId),
+          eq(trips.status, 'completed'),
+          gte(trips.created_at, today),
+        ),
+      )
+      .orderBy(desc(trips.created_at));
+
+    const cash = todayTrips
+      .filter((t) => t.payment_method === 'cash')
+      .reduce((sum, t) => sum + (Number(t.driver_earnings) || 0), 0);
+
+    const transfer = todayTrips
+      .filter((t) => t.payment_method === 'mercadopago')
+      .reduce((sum, t) => sum + (Number(t.driver_earnings) || 0), 0);
+
+    const yesterdayDate = sql`CURRENT_DATE - INTERVAL '1 day'`;
+    const [yesterdayResult] = await db
+      .select({ total: sum(trips.driver_earnings) })
+      .from(trips)
+      .where(
+        and(
+          eq(trips.driver_id, driverId),
+          eq(trips.status, 'completed'),
+          gte(trips.created_at, yesterdayDate),
+          lte(trips.created_at, sql`CURRENT_DATE - INTERVAL '1 millisecond'`),
+        ),
+      );
+
+    const [weekResult] = await db
+      .select({ total: sum(trips.driver_earnings) })
+      .from(trips)
+      .where(
+        and(
+          eq(trips.driver_id, driverId),
+          eq(trips.status, 'completed'),
+          gte(trips.created_at, weekStart),
+        ),
+      );
+
+    return {
+      total: cash + transfer,
+      cash,
+      transfer,
+      trip_count: todayTrips.length,
+      trips: todayTrips,
+      yesterday: Number(yesterdayResult?.total ?? 0),
+      week: Number(weekResult?.total ?? 0),
+    };
+  },
+
   async getSummary(user: AuthUser) {
     const driverId = await getDriverId(user);
 
@@ -184,7 +242,7 @@ export const earningsService = {
     let seniorityDays = 0;
     if (driver?.created_at) {
       const diffMs = Date.now() - driver.created_at.getTime();
-      seniorityDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      seniorityDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
     }
 
     const [totalEarnings] = await db

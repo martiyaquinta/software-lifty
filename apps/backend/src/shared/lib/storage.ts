@@ -31,8 +31,8 @@ async function retry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 1000): Pro
 
 export async function uploadFile(file: File, path: string): Promise<string> {
   const client = getClient();
-  if (!client || process.env.NODE_ENV !== 'production') {
-    logger.info('[STORAGE] Upload:', path, `(${file.size} bytes)`);
+  if (!client) {
+    logger.info('[STORAGE] Upload (mock):', path, `(${file.size} bytes)`);
     return `mock://storage.lifty/${path}`;
   }
 
@@ -47,7 +47,7 @@ export async function uploadFile(file: File, path: string): Promise<string> {
 
 export async function getSignedUrl(path: string, expiresIn = 3600): Promise<string> {
   const client = getClient();
-  if (!client || process.env.NODE_ENV !== 'production') {
+  if (!client) {
     return `mock://storage.lifty/${path}`;
   }
 

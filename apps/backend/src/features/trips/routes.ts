@@ -134,4 +134,15 @@ export const tripRoutes = new Elysia({ prefix: '/trips' })
       );
     },
     { params: tripIdParams, body: rateTripBody },
+  )
+  .put(
+    '/:id/collect',
+    ({ user, params, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: 'Unauthorized' };
+      }
+      return safeCall(() => tripService.collectTrip(user, params.id), set);
+    },
+    { params: tripIdParams },
   );

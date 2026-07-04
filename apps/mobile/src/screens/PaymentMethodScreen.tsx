@@ -43,7 +43,12 @@ export const PaymentMethodScreen: React.FC = () => {
   });
 
   const addMutation = useMutation({
-    mutationFn: async (body: { cvu: string; alias: string; bank: string }) => {
+    mutationFn: async (body: {
+      method_type: string;
+      account_number: string;
+      titular_name: string;
+      wallet: string;
+    }) => {
       await apiClient.post('/drivers/me/payment-methods', body);
     },
     onSuccess: () => {
@@ -73,7 +78,7 @@ export const PaymentMethodScreen: React.FC = () => {
   });
 
   const handleDelete = (method: PaymentMethod) => {
-    Alert.alert('Eliminar metodo de pago', `Eliminar CVU ${method.cvu}?`, [
+    Alert.alert('Eliminar metodo de pago', `Eliminar CVU ${method.account_number}?`, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Eliminar',
@@ -87,7 +92,12 @@ export const PaymentMethodScreen: React.FC = () => {
 
   const handleAdd = () => {
     if (!isCvuValid || !alias.trim()) return;
-    addMutation.mutate({ cvu: cvu.replace(/\D/g, ''), alias: alias.trim(), bank: bank.trim() });
+    addMutation.mutate({
+      method_type: 'cvu',
+      account_number: cvu.replace(/\D/g, ''),
+      titular_name: alias.trim(),
+      wallet: bank.trim(),
+    });
   };
 
   return (
@@ -113,9 +123,9 @@ export const PaymentMethodScreen: React.FC = () => {
           methods.map((method) => (
             <View key={method.id} style={styles.methodCard}>
               <View style={styles.methodInfo}>
-                <Text style={styles.methodAlias}>{method.alias ?? 'CVU'}</Text>
-                <Text style={styles.methodCvu}>{method.cvu}</Text>
-                {method.bank ? <Text style={styles.methodBank}>{method.bank}</Text> : null}
+                <Text style={styles.methodAlias}>{method.titular_name ?? 'CVU'}</Text>
+                <Text style={styles.methodCvu}>{method.account_number}</Text>
+                {method.wallet ? <Text style={styles.methodBank}>{method.wallet}</Text> : null}
               </View>
               <TouchableOpacity onPress={() => handleDelete(method)} style={styles.deleteButton}>
                 <Text style={styles.deleteIcon}>✕</Text>

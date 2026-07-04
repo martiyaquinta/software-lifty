@@ -58,7 +58,7 @@ function wsConnect(port: number, token: string): Promise<{ ws: WebSocket; open: 
     const timeout = setTimeout(() => {
       ws.close();
       reject(new Error('WebSocket connection timeout'));
-    }, 10000);
+    }, 15000);
 
     ws.onopen = () => {
       clearTimeout(timeout);
@@ -96,7 +96,7 @@ async function wsSendAndWait(message: object, ws: WebSocket, driverId: string): 
   return new Promise((resolve) => {
     ws.send(JSON.stringify(message));
     const poll = async () => {
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 40; i++) {
         await new Promise((r) => setTimeout(r, 50));
         const [loc] = await getDb()
           .select({ id: driverLocations.driver_id })

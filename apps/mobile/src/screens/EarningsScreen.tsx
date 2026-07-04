@@ -111,11 +111,11 @@ export const EarningsScreen: React.FC = () => {
               <Text style={styles.cardTitle}>Tus ganancias</Text>
               <View style={styles.earningRow}>
                 <Text style={styles.earningLabel}>Ayer</Text>
-                <Text style={styles.earningAmount}>$3.800</Text>
+                <Text style={styles.earningAmount}>{formatCurrency(earnings.yesterday ?? 0)}</Text>
               </View>
               <View style={styles.earningRow}>
                 <Text style={styles.earningLabel}>Esta semana</Text>
-                <Text style={styles.earningAmount}>$12.800</Text>
+                <Text style={styles.earningAmount}>{formatCurrency(earnings.week ?? 0)}</Text>
               </View>
             </Card>
 
@@ -164,11 +164,11 @@ export const EarningsScreen: React.FC = () => {
               <Text style={styles.cardTitle}>Tus ganancias</Text>
               <View style={styles.earningRow}>
                 <Text style={styles.earningLabel}>Ayer</Text>
-                <Text style={styles.earningAmount}>$3.800</Text>
+                <Text style={styles.earningAmount}>{formatCurrency(earnings?.yesterday ?? 0)}</Text>
               </View>
               <View style={styles.earningRow}>
                 <Text style={styles.earningLabel}>Esta semana</Text>
-                <Text style={styles.earningAmount}>$12.800</Text>
+                <Text style={styles.earningAmount}>{formatCurrency(earnings?.week ?? 0)}</Text>
               </View>
             </Card>
 

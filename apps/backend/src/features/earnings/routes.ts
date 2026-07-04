@@ -34,13 +34,18 @@ export const earningsRoutes = new Elysia({ prefix: '/earnings' })
     { query: historyQuery },
   );
 
-export const driverStatsRoutes = new Elysia({ prefix: '/drivers' }).get(
-  '/me/stats',
-  ({ user, set }) => {
+export const driverStatsRoutes = new Elysia({ prefix: '/drivers' })
+  .get('/me/stats', ({ user, set }) => {
     if (!user) {
       set.status = 401;
       return { error: 'Unauthorized' };
     }
     return safeCall(() => earningsService.getStats(user), set);
-  },
-);
+  })
+  .get('/me/earnings/daily', ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+    return safeCall(() => earningsService.getDaily(user), set);
+  });
