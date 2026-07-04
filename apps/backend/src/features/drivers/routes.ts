@@ -1,5 +1,11 @@
 import { Elysia } from 'elysia';
-import { addDocumentBody, driverIdParams, toggleOnlineBody, updateProfileBody, uploadPhotoBody } from './schema';
+import {
+  addDocumentBody,
+  driverIdParams,
+  toggleOnlineBody,
+  updateProfileBody,
+  uploadPhotoBody,
+} from './schema';
 import { driversService } from './service';
 
 import { safeCall } from '../../shared/lib/route-utils';
