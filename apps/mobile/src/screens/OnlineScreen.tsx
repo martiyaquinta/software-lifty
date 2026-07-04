@@ -42,7 +42,7 @@ export const OnlineScreen: React.FC = () => {
       setToggleError(null);
 
       try {
-        await apiClient.put('/drivers/me/online', { online: newValue });
+        await apiClient.put('/drivers/me/online', { is_online: newValue });
         setOnline(newValue);
 
         if (newValue) {
