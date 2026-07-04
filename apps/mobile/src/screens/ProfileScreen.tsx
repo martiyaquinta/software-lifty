@@ -66,6 +66,10 @@ const DOC_LABELS: Record<string, string> = {
   background_check: 'Antecedentes',
 };
 
+function isRealUrl(url: string | null): url is string {
+  return !!url && (url.startsWith('http://') || url.startsWith('https://'));
+}
+
 export const ProfileScreen: React.FC = () => {
   const navigation = useAppNavigation();
   const signOut = useSignOut();
@@ -193,8 +197,8 @@ export const ProfileScreen: React.FC = () => {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.profileCard} padding={theme.spacing.lg}>
           <View style={styles.avatar}>
-            {profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+            {isRealUrl(profile?.avatar_url ?? null) ? (
+              <Image source={{ uri: profile!.avatar_url! }} style={styles.avatarImage} />
             ) : (
               <Text style={styles.avatarIcon}>👤</Text>
             )}
@@ -278,8 +282,8 @@ export const ProfileScreen: React.FC = () => {
             <TouchableOpacity style={styles.editAvatar} onPress={handlePickPhoto}>
               {editPhotoUri ? (
                 <Image source={{ uri: editPhotoUri }} style={styles.editAvatarImage} />
-              ) : profile?.avatar_url ? (
-                <Image source={{ uri: profile.avatar_url }} style={styles.editAvatarImage} />
+              ) : isRealUrl(profile?.avatar_url ?? null) ? (
+                <Image source={{ uri: profile!.avatar_url! }} style={styles.editAvatarImage} />
               ) : (
                 <Text style={styles.editAvatarIcon}>📷</Text>
               )}
