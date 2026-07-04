@@ -148,11 +148,6 @@ export const ProfileScreen: React.FC = () => {
         const compressed = await compressImage(editPhotoUri);
         const uploadResult = await uploadPhotoToBackend(compressed.uri, 'avatar.jpg', 'image/jpeg');
         photoUrl = uploadResult.file_url;
-        if (isRealUrl(photoUrl)) {
-          setProfile({ ...profile, avatar_url: photoUrl });
-        } else {
-          setProfile({ ...profile, avatar_url: editPhotoUri });
-        }
       }
 
       const newFullName = `${editFirstName.trim()} ${editLastName.trim()}`.trim();
@@ -163,7 +158,8 @@ export const ProfileScreen: React.FC = () => {
         photo_url: photoUrl,
       });
 
-      setProfile({ ...profile, full_name: newFullName });
+      const newAvatarUrl = isRealUrl(photoUrl) ? photoUrl : (editPhotoUri ?? photoUrl);
+      setProfile({ ...profile, full_name: newFullName, avatar_url: newAvatarUrl });
 
       setEditVisible(false);
     } catch {
