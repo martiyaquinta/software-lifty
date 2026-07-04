@@ -16,6 +16,7 @@ const SCREEN_TO_ROUTE: Record<string, string> = {
   Selfie: '/selfie',
   UnderReview: '/under-review',
   Online: '/online',
+  Active: '/active',
   IncomingRequest: '/incoming-request',
   Navigation: '/navigation',
   WaitingPassenger: '/waiting-passenger',
