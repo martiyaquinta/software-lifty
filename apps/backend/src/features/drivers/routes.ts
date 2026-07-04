@@ -65,6 +65,13 @@ export const driversRoutes = new Elysia({ prefix: '/drivers' })
     },
     { body: addDocumentBody },
   )
+  .get('/me/documents', ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+    return safeCall(() => driversService.listDocuments(user), set);
+  })
   .post(
     '/me/photo',
     ({ user, body, set }) => {
