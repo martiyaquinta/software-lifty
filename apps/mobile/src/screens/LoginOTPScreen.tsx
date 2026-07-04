@@ -2,6 +2,7 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { apiClient } from '../api/client';
+import type { DriverStatus } from '../api/types';
 import { driverStatusSchema } from '../api/types';
 import { Button } from '../components/Button';
 import { OTPInput } from '../components/OTPInput';
@@ -11,6 +12,19 @@ import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
 
 const COOLDOWN_SECONDS = 30;
+
+type DriverStatusValue = DriverStatus['status'] | null;
+
+const STATUS_ROUTE: Record<string, { screen: string; storeStatus: DriverStatusValue }> = {
+  'pending:step1': { screen: 'Terms', storeStatus: 'pending' },
+  'pending:step2': { screen: 'OnboardingStep1', storeStatus: 'pending' },
+  'pending:step3': { screen: 'OnboardingStep2', storeStatus: 'pending' },
+  pending: { screen: 'Terms', storeStatus: 'pending' },
+  under_review: { screen: 'UnderReview', storeStatus: 'under_review' },
+  approved: { screen: 'Online', storeStatus: 'approved' },
+  rejected: { screen: '', storeStatus: 'rejected' },
+  suspended: { screen: '', storeStatus: 'suspended' },
+};
 
 export const LoginOTPScreen: React.FC = () => {
   const navigation = useAppNavigation();
@@ -48,12 +62,26 @@ export const LoginOTPScreen: React.FC = () => {
     if (otp.length !== 6 || verifyEmail.isPending || !email) return;
     setStatusError(null);
     try {
-      await verifyEmail.mutateAsync({ email, token: otp } as any);
+      const verifyResult = await verifyEmail.mutateAsync({ email, token: otp } as any);
+      console.log('[LoginOTP] Verify success:', verifyResult);
       try {
+        console.log('[LoginOTP] Fetching /drivers/me/status...');
         const { data: body } = await apiClient.get('/drivers/me/status');
+        console.log('[LoginOTP] /drivers/me/status response:', JSON.stringify(body));
         const payload = body?.data ?? body;
         const parsed = driverStatusSchema.safeParse(payload);
-        const status: string = parsed.success ? parsed.data.status : payload?.status;
+        const driverData = parsed.success ? parsed.data : (payload as DriverStatus);
+        const status = driverData.status;
+        const step = driverData.step;
+        console.log(
+          '[LoginOTP] driverStatus:',
+          status,
+          '| step:',
+          step,
+          '| parsed success:',
+          parsed.success,
+        );
+
         if (
           status &&
           ['pending', 'approved', 'under_review', 'rejected', 'suspended'].includes(status)
@@ -63,28 +91,26 @@ export const LoginOTPScreen: React.FC = () => {
           );
         }
 
-        switch (status) {
-          case 'pending':
-            navigation.navigate('Terms');
-            break;
-          case 'approved':
-            navigation.navigate('Online');
-            break;
-          case 'under_review':
-            navigation.navigate('UnderReview');
-            break;
-          case 'rejected':
-            setStatusError('Tu cuenta ha sido rechazada. Contacta a soporte.');
-            break;
-          case 'suspended':
-            setStatusError('Tu cuenta ha sido suspendida.');
-            break;
-          default:
-            navigation.navigate('Online');
-            break;
+        if (status === 'rejected') {
+          console.log('[LoginOTP] → rejected, showing error');
+          setStatusError('Tu cuenta ha sido rechazada. Contacta a soporte.');
+          return;
+        }
+        if (status === 'suspended') {
+          console.log('[LoginOTP] → suspended, showing error');
+          setStatusError('Tu cuenta ha sido suspendida.');
+          return;
+        }
+
+        const key = step ? `${status}:${step}` : status;
+        const route = STATUS_ROUTE[key] ?? STATUS_ROUTE.approved;
+        console.log('[LoginOTP] route key:', key, '→ screen:', route.screen);
+
+        if (route.screen) {
+          navigation.navigate(route.screen);
         }
       } catch (apiErr: any) {
-        setStatusError(apiErr?.message ?? 'Error al verificar el estado de tu cuenta.');
+        console.log('[LoginOTP] /drivers/me/status ERROR:', apiErr?.message);
       }
     } catch {
       // error displayed via verifyEmail.error

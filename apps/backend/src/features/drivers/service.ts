@@ -61,17 +61,42 @@ export const driversService = {
       .where(eq(drivers.user_id, user.id))
       .limit(1);
 
-    // Map the internal onboarding lifecycle (step1..step3/kyc) to the
-    // coarse status vocabulary the app navigates with.
-    if (!driver) return { status: 'pending' };
+    if (!driver) {
+      console.log('[getMyStatus] userId:', user.id, '→ driver row NOT FOUND → returning pending');
+      return { status: 'pending' };
+    }
+
+    console.log(
+      '[getMyStatus] userId:',
+      user.id,
+      '| status:',
+      driver.status,
+      '| kyc_status:',
+      driver.kyc_status,
+    );
+
     if (driver.status === 'approved' || driver.status === 'suspended') {
-      return { status: driver.status };
+      console.log('[getMyStatus] → returning', driver.status);
+      return { status: driver.status, step: driver.status };
+    }
+    if (driver.kyc_status === 'approved') {
+      console.log(
+        '[getMyStatus] → kyc_status approved but status is',
+        driver.status,
+        '→ returning approved',
+      );
+      return { status: 'approved', step: 'approved' };
     }
     if (driver.kyc_status === 'under_review' || driver.kyc_status === 'in_progress') {
+      console.log('[getMyStatus] → returning under_review');
       return { status: 'under_review' };
     }
-    if (driver.kyc_status === 'rejected') return { status: 'rejected' };
-    return { status: 'pending' };
+    if (driver.kyc_status === 'rejected') {
+      console.log('[getMyStatus] → returning rejected');
+      return { status: 'rejected' };
+    }
+    console.log('[getMyStatus] → FALLTHROUGH returning pending, step:', driver.status);
+    return { status: 'pending', step: driver.status };
   },
 
   async toggleOnline(user: AuthUser, isOnline: boolean) {
