@@ -25,15 +25,15 @@ async function getOrThrow(user: AuthUser) {
   return driver;
 }
 
-async function createKycSession(driverId: string): Promise<{
+async function createKycSession(userId: string): Promise<{
   session_token: string;
   session_url: string;
 } | null> {
   try {
-    return await createSession(driverId);
+    return await createSession(userId);
   } catch (err) {
     logger.warn('[ONBOARDING] Failed to create DIDIT session', {
-      driverId: driverId.split('-')[0],
+      userId: userId.split('-')[0],
       error: (err as Error).message,
     });
     return null;
@@ -148,7 +148,7 @@ export const onboardingService = {
       .set({ status: 'kyc', kyc_status: 'in_progress', updated_at: new Date() })
       .where(eq(drivers.id, driver.id));
 
-    const kycSession = await createKycSession(driver.id);
+    const kycSession = await createKycSession(user.id);
 
     return {
       documents: created,
@@ -190,7 +190,7 @@ export const onboardingService = {
       .set({ status: 'kyc', kyc_status: 'in_progress', updated_at: new Date() })
       .where(eq(drivers.id, driver.id));
 
-    const kycSession = await createKycSession(driver.id);
+    const kycSession = await createKycSession(user.id);
 
     return { id: doc.id, doc_type: doc.doc_type, file_url: doc.file_url, kyc_session: kycSession };
   },

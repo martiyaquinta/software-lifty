@@ -5,6 +5,25 @@ import { kycService } from './service';
 
 import { safeCall } from '../../shared/lib/route-utils';
 
+function extractWebhookData(body: any): {
+  userId: string;
+  status: string;
+  documentNumber?: string;
+  fullName?: string;
+} {
+  const userId = body.vendor_data || body.user_id || body.driver_id;
+  const status = body.status;
+  const documentNumber =
+    body.document_number ||
+    body.documentNumber ||
+    body.result?.document_number ||
+    body.result?.documentNumber;
+  const fullName =
+    body.full_name || body.fullName || body.result?.full_name || body.result?.fullName;
+
+  return { userId, status, documentNumber, fullName };
+}
+
 export const kycRoutes = new Elysia({ prefix: '/kyc' })
   .get(
     '/session/:driver_id',
@@ -33,15 +52,17 @@ export const kycRoutes = new Elysia({ prefix: '/kyc' })
       return { error: 'Unauthorized', message: 'Invalid HMAC signature' };
     }
 
-    if (!body.driver_id || !body.status) {
+    const { userId, status, documentNumber, fullName } = extractWebhookData(body);
+
+    if (!userId || !status) {
       set.status = 400;
-      return { error: 'Bad Request', message: 'driver_id and status are required' };
+      return { error: 'Bad Request', message: 'userId and status are required' };
     }
 
     return safeCall(
       () =>
         kycService
-          .processWebhook(body.driver_id, body.status)
+          .processWebhook(userId, status, { documentNumber, fullName })
           .then(() => ({ message: 'Webhook processed' })),
       set,
     );
