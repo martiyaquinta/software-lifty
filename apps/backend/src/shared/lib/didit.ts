@@ -2,11 +2,11 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { logger } from './logger';
 
 export async function createSession(
-  driverId: string,
+  userId: string,
 ): Promise<{ session_token: string; session_url: string }> {
   if (process.env.NODE_ENV === 'test') {
     return {
-      session_token: `mock-session-${driverId}`,
+      session_token: `mock-session-${userId}`,
       session_url: 'https://didit.app/mock-session',
     };
   }
@@ -14,7 +14,7 @@ export async function createSession(
   const apiKey = process.env.DIDIT_API_KEY;
   if (!apiKey) {
     logger.warn('[DIDIT] DIDIT_API_KEY not set — using mock session');
-    const token = `mock-session-${driverId}`;
+    const token = `mock-session-${userId}`;
     return { session_token: token, session_url: `https://verify.didit.app?token=${token}` };
   }
 
@@ -27,7 +27,7 @@ export async function createSession(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        vendor_data: driverId,
+        vendor_data: userId,
         features: 'OCR + FACE',
       }),
       signal: AbortSignal.timeout(10000),

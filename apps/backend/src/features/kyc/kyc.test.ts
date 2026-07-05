@@ -40,13 +40,14 @@ async function request(
   return { status: res.status, data };
 }
 
-async function registerAndGetToken(phone: string, _password: string): Promise<string> {
+async function registerAndGetTokenAndUser(phone: string, _password: string): Promise<{ token: string; userId: string }> {
   const db = getDb();
   const [user] = await db
     .insert(users)
     .values({ phone, full_name: 'Test Driver', role: 'driver', password_hash: 'unused' })
     .returning({ id: users.id });
-  return createTestToken(user.id, 'driver');
+  const token = await createTestToken(user.id, 'driver');
+  return { token, userId: user.id };
 }
 
 async function createDriver(token: string): Promise<string> {
@@ -77,7 +78,7 @@ describe('KYC', () => {
   const password = 'testPass123';
 
   test('GET /session/id returns session token', async () => {
-    const token = await registerAndGetToken(phone, password);
+    const { token } = await registerAndGetTokenAndUser(phone, password);
     const driverId = await createDriver(token);
 
     const { status, data } = await request('GET', `/api/kyc/session/${driverId}`, undefined, token);
@@ -89,7 +90,7 @@ describe('KYC', () => {
   });
 
   test('GET /session/id without auth returns 401', async () => {
-    const token = await registerAndGetToken(phone, password);
+    const { token } = await registerAndGetTokenAndUser(phone, password);
     const driverId = await createDriver(token);
 
     const { status, data } = await request('GET', `/api/kyc/session/${driverId}`);
@@ -99,10 +100,10 @@ describe('KYC', () => {
   });
 
   test("GET /session/id for different user's driver returns error", async () => {
-    const tokenA = await registerAndGetToken(phone, password);
+    const { token: tokenA } = await registerAndGetTokenAndUser(phone, password);
     const driverIdA = await createDriver(tokenA);
 
-    const tokenB = await registerAndGetToken('+5492613333333', password);
+    const { token: tokenB } = await registerAndGetTokenAndUser('+5492613333333', password);
 
     const { status, data } = await request(
       'GET',
@@ -116,14 +117,14 @@ describe('KYC', () => {
     expect(data.error.message).toBe('Driver not found or does not belong to you');
   });
 
-  test('POST /webhook updates kyc status to in_progress', async () => {
-    const token = await registerAndGetToken(phone, password);
-    const driverId = await createDriver(token);
+  test('POST /webhook updates user kyc status to in_progress', async () => {
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await createDriver(token);
 
     const { status, data } = await request(
       'POST',
       '/api/kyc/webhook/didit',
-      { driver_id: driverId, status: 'in_progress' },
+      { vendor_data: userId, status: 'in_progress' },
       undefined,
       { 'X-Didit-Signature': 'valid' },
     );
@@ -132,18 +133,21 @@ describe('KYC', () => {
     expect(data.message).toBe('Webhook processed');
 
     const db = getDb();
-    const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId)).limit(1);
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    expect(user!.kyc_status).toBe('in_progress');
+
+    const [driver] = await db.select().from(drivers).where(eq(drivers.user_id, userId)).limit(1);
     expect(driver!.kyc_status).toBe('in_progress');
   });
 
-  test('POST /webhook with approved status updates driver.status', async () => {
-    const token = await registerAndGetToken(phone, password);
+  test('POST /webhook with approved status updates user and driver', async () => {
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
     const driverId = await createDriver(token);
 
     await request(
       'POST',
       '/api/kyc/webhook/didit',
-      { driver_id: driverId, status: 'in_progress' },
+      { vendor_data: userId, status: 'in_progress' },
       undefined,
       { 'X-Didit-Signature': 'valid' },
     );
@@ -151,7 +155,7 @@ describe('KYC', () => {
     await request(
       'POST',
       '/api/kyc/webhook/didit',
-      { driver_id: driverId, status: 'under_review' },
+      { vendor_data: userId, status: 'under_review' },
       undefined,
       { 'X-Didit-Signature': 'valid' },
     );
@@ -159,7 +163,12 @@ describe('KYC', () => {
     const { status } = await request(
       'POST',
       '/api/kyc/webhook/didit',
-      { driver_id: driverId, status: 'approved' },
+      {
+        vendor_data: userId,
+        status: 'approved',
+        full_name: 'Juan Perez',
+        document_number: '35678901',
+      },
       undefined,
       { 'X-Didit-Signature': 'valid' },
     );
@@ -167,19 +176,25 @@ describe('KYC', () => {
     expect(status).toBe(200);
 
     const db = getDb();
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    expect(user!.kyc_status).toBe('approved');
+    expect(user!.verified_name).toBe('Juan Perez');
+    expect(user!.verified_document_hash).toBeString();
+    expect(user!.document_number_last4).toBe('8901');
+
     const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId)).limit(1);
     expect(driver!.kyc_status).toBe('approved');
     expect(driver!.status).toBe('approved');
   });
 
   test('POST /webhook with invalid HMAC returns error', async () => {
-    const token = await registerAndGetToken(phone, password);
-    const driverId = await createDriver(token);
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await createDriver(token);
 
     const { status, data } = await request(
       'POST',
       '/api/kyc/webhook/didit',
-      { driver_id: driverId, status: 'in_progress' },
+      { vendor_data: userId, status: 'in_progress' },
       undefined,
       { 'X-Didit-Signature': 'invalid' },
     );
@@ -190,13 +205,13 @@ describe('KYC', () => {
   });
 
   test('POST /webhook with invalid status returns error', async () => {
-    const token = await registerAndGetToken(phone, password);
-    const driverId = await createDriver(token);
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await createDriver(token);
 
     const { status, data } = await request(
       'POST',
       '/api/kyc/webhook/didit',
-      { driver_id: driverId, status: 'bogus' },
+      { vendor_data: userId, status: 'bogus' },
       undefined,
       { 'X-Didit-Signature': 'valid' },
     );
@@ -207,16 +222,16 @@ describe('KYC', () => {
   });
 
   test('POST /webhook rejects transition from approved back to pending', async () => {
-    const token = await registerAndGetToken(phone, password);
-    const driverId = await createDriver(token);
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await createDriver(token);
 
     const db = getDb();
-    await db.update(drivers).set({ kyc_status: 'approved' }).where(eq(drivers.id, driverId));
+    await db.update(users).set({ kyc_status: 'approved' }).where(eq(users.id, userId));
 
     const { status, data } = await request(
       'POST',
       '/api/kyc/webhook/didit',
-      { driver_id: driverId, status: 'pending' },
+      { vendor_data: userId, status: 'pending' },
       undefined,
       { 'X-Didit-Signature': 'valid' },
     );
