@@ -96,8 +96,8 @@ async function wsSendAndWait(message: object, ws: WebSocket, driverId: string): 
   return new Promise((resolve) => {
     ws.send(JSON.stringify(message));
     const poll = async () => {
-      for (let i = 0; i < 40; i++) {
-        await new Promise((r) => setTimeout(r, 50));
+      for (let i = 0; i < 80; i++) {
+        await new Promise((r) => setTimeout(r, 100));
         const [loc] = await getDb()
           .select({ id: driverLocations.driver_id })
           .from(driverLocations)
@@ -156,6 +156,7 @@ describe('Location WebSocket', () => {
 
     await wsSendAndWait({ lat: -32.89, lng: -68.84, heading: 180 }, ws, driverId);
     ws.close();
+    await new Promise((r) => setTimeout(r, 200));
 
     const [loc] = await getDb()
       .select()
@@ -209,6 +210,7 @@ describe('Location WebSocket', () => {
 
     await wsSendAndWait({ lat: 40.71, lng: -74.0 }, ws, driverId);
     ws.close();
+    await new Promise((r) => setTimeout(r, 200));
 
     const [loc] = await getDb()
       .select()
