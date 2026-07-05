@@ -141,6 +141,13 @@
       "when": 1783200000000,
       "tag": "0018_add_is_collected",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783390000000,
+      "tag": "0019_user_kyc_and_admin_review",
+      "breakpoints": true
     }
   ]
 }

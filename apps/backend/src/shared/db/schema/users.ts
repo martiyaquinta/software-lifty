@@ -17,4 +17,8 @@ export const users = pgTable('users', {
   reset_code: varchar('reset_code', { length: 6 }),
   reset_code_expires_at: timestamp('reset_code_expires_at'),
   reset_attempts: integer('reset_attempts').notNull().default(0),
+  kyc_status: varchar('kyc_status', { length: 30 }).notNull().default('pending'),
+  verified_name: varchar('verified_name', { length: 255 }),
+  verified_document_hash: varchar('verified_document_hash', { length: 64 }),
+  document_number_last4: varchar('document_number_last4', { length: 4 }),
 });

@@ -154,6 +154,10 @@ describe('Onboarding', () => {
     expect(data.status).toBe('kyc');
     expect(data.message).toBe('Step 3 completed');
     expect(data.documents.length).toBe(2);
+    expect(data.kyc_session).toBeDefined();
+    expect(data.kyc_session.session_token).toBeString();
+    expect(data.kyc_session.session_token).toContain('mock-session');
+    expect(data.kyc_session.session_url).toBeString();
 
     const db = getDb();
     const allDocs = await db.select().from(driverDocuments);
@@ -232,6 +236,10 @@ describe('Onboarding', () => {
     expect(res.status).toBe(200);
     expect(data.file_url).toBeDefined();
     expect(data.doc_type).toBe('license');
+    expect(data.kyc_session).toBeDefined();
+    expect(data.kyc_session.session_token).toBeString();
+    expect(data.kyc_session.session_token).toContain('mock-session');
+    expect(data.kyc_session.session_url).toBeString();
   });
 
   test('step3/upload without auth returns 401', async () => {
