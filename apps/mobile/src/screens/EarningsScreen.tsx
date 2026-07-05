@@ -7,10 +7,12 @@ import { Card } from '../components/Card';
 import { TabBar } from '../components/TabBar';
 import { SkeletonCard } from '../components/feedback/SkeletonCard';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { useOnlineStore } from '../store/onlineStore';
 import { theme } from '../theme';
 
 export const EarningsScreen: React.FC = () => {
   const navigation = useAppNavigation();
+  const isOnline = useOnlineStore((s) => s.isOnline);
   const [activeTab, setActiveTab] = React.useState<'home' | 'earnings' | 'profile'>('earnings');
 
   const {
@@ -29,7 +31,7 @@ export const EarningsScreen: React.FC = () => {
 
   const handleTabPress = (tab: 'home' | 'earnings' | 'profile') => {
     setActiveTab(tab);
-    if (tab === 'home') navigation.navigate('Online');
+    if (tab === 'home') navigation.navigate(isOnline ? 'Active' : 'Online');
     if (tab === 'profile') navigation.navigate('Profile');
   };
 
