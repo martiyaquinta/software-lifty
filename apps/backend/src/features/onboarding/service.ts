@@ -2,7 +2,9 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
 import { driverDocuments, drivers, vehicles } from '../../shared/db/schema';
 import { users } from '../../shared/db/schema';
+import { createSession } from '../../shared/lib/didit';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
+import { logger } from '../../shared/lib/logger';
 import { uploadFile } from '../../shared/lib/storage';
 import type { AuthUser } from '../../shared/middleware/auth';
 
@@ -21,6 +23,21 @@ async function getOrThrow(user: AuthUser) {
 
   if (!driver) throw new NotFoundError('Driver profile not found. Complete step 1 first');
   return driver;
+}
+
+async function createKycSession(driverId: string): Promise<{
+  session_token: string;
+  session_url: string;
+} | null> {
+  try {
+    return await createSession(driverId);
+  } catch (err) {
+    logger.warn('[ONBOARDING] Failed to create DIDIT session', {
+      driverId: driverId.split('-')[0],
+      error: (err as Error).message,
+    });
+    return null;
+  }
 }
 
 export const onboardingService = {
@@ -131,7 +148,14 @@ export const onboardingService = {
       .set({ status: 'kyc', kyc_status: 'in_progress', updated_at: new Date() })
       .where(eq(drivers.id, driver.id));
 
-    return { documents: created, status: 'kyc', message: 'Step 3 completed' };
+    const kycSession = await createKycSession(driver.id);
+
+    return {
+      documents: created,
+      status: 'kyc',
+      message: 'Step 3 completed',
+      kyc_session: kycSession,
+    };
   },
 
   async uploadDocument(user: AuthUser, file: File, docType: string) {
@@ -166,7 +190,9 @@ export const onboardingService = {
       .set({ status: 'kyc', kyc_status: 'in_progress', updated_at: new Date() })
       .where(eq(drivers.id, driver.id));
 
-    return { id: doc.id, doc_type: doc.doc_type, file_url: doc.file_url };
+    const kycSession = await createKycSession(driver.id);
+
+    return { id: doc.id, doc_type: doc.doc_type, file_url: doc.file_url, kyc_session: kycSession };
   },
 
   async getStatus(user: AuthUser) {
