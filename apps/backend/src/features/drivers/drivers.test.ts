@@ -33,17 +33,17 @@ async function request(method: string, path: string, body?: object, token?: stri
   return { status: res.status, data };
 }
 
-async function registerAndGetToken(phone: string, _password: string): Promise<string> {
+async function registerAndGetToken(phone: string, _password: string): Promise<{ token: string; userId: string }> {
   const db = getDb();
   const [user] = await db
     .insert(users)
     .values({ phone, full_name: 'Juan Perez', role: 'driver', password_hash: 'unused' })
     .returning({ id: users.id });
-  return createTestToken(user.id, 'driver');
+  return { token: await createTestToken(user.id, 'driver'), userId: user.id };
 }
 
 async function fullOnboarding(phone: string, password: string) {
-  const token = await registerAndGetToken(phone, password);
+  const { token, userId } = await registerAndGetToken(phone, password);
   const { data: step1Res } = await request(
     'POST',
     '/api/onboarding/step1',
@@ -51,13 +51,16 @@ async function fullOnboarding(phone: string, password: string) {
     token,
   );
   const driverId = step1Res.id;
+  const db = getDb();
+  await db.update(users).set({ kyc_status: 'approved' }).where(eq(users.id, userId));
+  await db.update(drivers).set({ kyc_status: 'approved' }).where(eq(drivers.id, driverId));
   await request(
     'POST',
     '/api/onboarding/step2',
     { brand: 'Toyota', model: 'Corolla', year: 2022, color: 'Blanco', plate: 'ABC123' },
     token,
   );
-  return { token, driverId };
+  return { token, driverId, userId };
 }
 
 beforeAll(() => {
@@ -88,7 +91,7 @@ describe('Driver Profile', () => {
     expect(data.avatar_url).toBeNull();
     expect(data.rating_avg).toBe(0);
     expect(data.total_trips).toBe(0);
-    expect(data.kyc_verified).toBe(false);
+    expect(data.kyc_verified).toBe(true);
     expect(data.vehicle.brand).toBe('Toyota');
     expect(data.vehicle.model).toBe('Corolla');
     expect(data.vehicle.year).toBe(2022);
@@ -127,8 +130,8 @@ describe('Driver Profile', () => {
     expect(data.email).toBeNull();
     expect(data.full_name).toBe('Juan Perez');
     expect(data.avatar_url).toBeNull();
-    expect(data.status).toBe('step3');
-    expect(data.kyc_status).toBe('pending');
+    expect(data.status).toBe('documents');
+    expect(data.kyc_status).toBe('approved');
     expect(data.rating_avg).toBe(0);
     expect(data.total_trips).toBe(0);
     expect(data.completion_rate).toBe(0);
@@ -150,7 +153,7 @@ describe('Driver Profile', () => {
   });
 
   test('GET /me without driver row returns onboarding status', async () => {
-    const token = await registerAndGetToken(phone, password);
+    const { token } = await registerAndGetToken(phone, password);
 
     const { status, data } = await request('GET', '/api/drivers/me', undefined, token);
 
@@ -160,9 +163,10 @@ describe('Driver Profile', () => {
   });
 
   test('GET /:id/profile includes kyc_verified badge', async () => {
-    const { driverId } = await fullOnboarding(phone, password);
+    const { driverId, userId } = await fullOnboarding(phone, password);
 
     const db = getDb();
+    await db.update(users).set({ kyc_status: 'approved' }).where(eq(users.id, userId));
     await db.update(drivers).set({ kyc_status: 'approved' }).where(eq(drivers.id, driverId));
 
     const { status, data } = await request('GET', `/api/drivers/${driverId}/profile`);
@@ -172,7 +176,7 @@ describe('Driver Profile', () => {
   });
 
   test('PUT /me/online toggles status', async () => {
-    const token = await registerAndGetToken(phone, password);
+    const { token } = await registerAndGetToken(phone, password);
     await request('POST', '/api/onboarding/step1', { full_name: 'Test' }, token);
 
     const { status, data } = await request(
@@ -215,7 +219,7 @@ describe('Driver Profile', () => {
   });
 
   test('PUT /me/online without driver row returns error', async () => {
-    const token = await registerAndGetToken(phone, password);
+    const { token } = await registerAndGetToken(phone, password);
     const { status, data } = await request(
       'PUT',
       '/api/drivers/me/online',

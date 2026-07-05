@@ -83,9 +83,27 @@ async function register(
   return createTestToken(user.id, 'driver');
 }
 
+async function registerWithUser(
+  phone: string,
+  _password = 'testPass123',
+  fullName = 'Test Driver',
+): Promise<{ token: string; userId: string }> {
+  const db = getDb();
+  const [user] = await db
+    .insert(users)
+    .values({ phone, full_name: fullName, role: 'driver', password_hash: 'unused' })
+    .returning({ id: users.id });
+  return { token: await createTestToken(user.id, 'driver'), userId: user.id };
+}
+
 async function driver(token: string): Promise<string> {
   const { data } = await req('POST', '/api/onboarding/step1', { full_name: 'Test Driver' }, token);
   return data.id;
+}
+
+async function approveKyc(userId: string) {
+  const db = getDb();
+  await db.update(users).set({ kyc_status: 'approved' }).where(eq(users.id, userId));
 }
 
 beforeAll(() => {
@@ -235,14 +253,14 @@ describe('Onboarding', () => {
     expect(status).toBe(401);
   });
   test('step1 → 200', async () => {
-    const token = await register('+54926100101');
+    const { token } = await registerWithUser('+54926100101');
     const { status, data } = await req('POST', '/api/onboarding/step1', { full_name: 'JP' }, token);
     expect(status).toBe(200);
     expect(data.id).toBeString();
-    expect(data.status).toBe('step2');
+    expect(data.status).toBe('kyc_pending');
   });
   test('step2 no step1 → 404', async () => {
-    const token = await register('+54926100102');
+    const { token } = await registerWithUser('+54926100102');
     const { status } = await req(
       'POST',
       '/api/onboarding/step2',
@@ -258,8 +276,9 @@ describe('Onboarding', () => {
     expect(status).toBe(404);
   });
   test('step2 → 200', async () => {
-    const token = await register('+54926100103');
+    const { token, userId } = await registerWithUser('+54926100103');
     await driver(token);
+    await approveKyc(userId);
     const { status, data } = await req(
       'POST',
       '/api/onboarding/step2',
@@ -276,8 +295,9 @@ describe('Onboarding', () => {
     expect(data.vehicle_id).toBeString();
   });
   test('step3 → 200 docs', async () => {
-    const token = await register('+54926100104');
+    const { token, userId } = await registerWithUser('+54926100104');
     await driver(token);
+    await approveKyc(userId);
     await req(
       'POST',
       '/api/onboarding/step2',
@@ -302,8 +322,9 @@ describe('Onboarding', () => {
     expect(data.documents).toBeArray();
   });
   test('step3 invalid type → 400', async () => {
-    const token = await register('+54926100105');
+    const { token, userId } = await registerWithUser('+54926100105');
     await driver(token);
+    await approveKyc(userId);
     await req(
       'POST',
       '/api/onboarding/step2',
@@ -327,21 +348,35 @@ describe('Onboarding', () => {
     expect(status).toBe(400);
   });
   test('status → 200', async () => {
-    const token = await register('+54926100106');
+    const { token, userId } = await registerWithUser('+54926100106');
     await driver(token);
+    await approveKyc(userId);
+    await req(
+      'POST',
+      '/api/onboarding/step2',
+      {
+        brand: 'T',
+        model: 'C',
+        year: 2020,
+        color: 'W',
+        plate: 'ABC',
+      },
+      token,
+    );
     const { status, data } = await req('GET', '/api/onboarding/status', undefined, token);
     expect(status).toBe(200);
-    expect(data.step).toBe('step2');
+    expect(data.step).toBe('documents');
   });
   test('status no driver → step1', async () => {
-    const token = await register('+54926100107');
+    const { token } = await registerWithUser('+54926100107');
     const { status, data } = await req('GET', '/api/onboarding/status', undefined, token);
     expect(status).toBe(200);
     expect(data.step).toBe('step1');
   });
   test('step3/upload → 200', async () => {
-    const token = await register('+54926100108');
+    const { token, userId } = await registerWithUser('+54926100108');
     await driver(token);
+    await approveKyc(userId);
     await req(
       'POST',
       '/api/onboarding/step2',
@@ -389,11 +424,10 @@ describe('KYC', () => {
     expect(status).not.toBe(500);
   });
   test('POST webhook/didit → 401/400 (no HMAC)', async () => {
-    const token = await register('+54926100202');
-    const id = await driver(token);
-    // Manual body parsing in handler may behave differently via app.handle()
+    const { token, userId } = await registerWithUser('+54926100202');
+    await driver(token);
     const { status } = await req('POST', '/api/kyc/webhook/didit', {
-      driver_id: id,
+      vendor_data: userId,
       status: 'approved',
     });
     expect(status).toBeGreaterThanOrEqual(400);

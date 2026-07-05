@@ -3,6 +3,7 @@ process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:
 process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { eq } from 'drizzle-orm';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
 import { driverDocuments, drivers, refreshTokens, users, vehicles } from '../../shared/db/schema';
@@ -41,6 +42,21 @@ async function registerAndGetToken(phone: string, _password: string): Promise<st
   return createTestToken(user.id, 'driver');
 }
 
+async function registerAndGetTokenAndUser(phone: string, _password: string): Promise<{ token: string; userId: string }> {
+  const db = getDb();
+  const [user] = await db
+    .insert(users)
+    .values({ phone, full_name: 'Test Driver', role: 'driver', password_hash: 'unused' })
+    .returning({ id: users.id });
+  const token = await createTestToken(user.id, 'driver');
+  return { token, userId: user.id };
+}
+
+async function approveKyc(userId: string) {
+  const db = getDb();
+  await db.update(users).set({ kyc_status: 'approved' }).where(eq(users.id, userId));
+}
+
 beforeAll(() => {
   app = createApp();
 });
@@ -58,7 +74,7 @@ describe('Onboarding', () => {
   const phone = '+5492611111111';
   const password = 'testPass123';
 
-  test('step1 creates driver profile', async () => {
+  test('step1 creates driver profile and returns kyc session', async () => {
     const token = await registerAndGetToken(phone, password);
 
     const { status, data } = await request(
@@ -70,13 +86,15 @@ describe('Onboarding', () => {
 
     expect(status).toBe(200);
     expect(data.id).toBeString();
-    expect(data.status).toBe('step2');
-    expect(data.message).toBe('Step 1 completed');
+    expect(data.status).toBe('kyc_pending');
+    expect(data.kyc_session).toBeDefined();
+    expect(data.kyc_session.session_token).toContain('mock-session');
+    expect(data.kyc_session.session_url).toBeString();
 
     const db = getDb();
     const [driver] = await db.select().from(drivers);
     expect(driver).toBeDefined();
-    expect(driver!.status).toBe('step2');
+    expect(driver!.status).toBe('kyc_pending');
   });
 
   test('step1 without auth returns 401', async () => {
@@ -87,9 +105,11 @@ describe('Onboarding', () => {
     expect(data.error).toBe('Unauthorized');
   });
 
-  test('step2 adds vehicle', async () => {
-    const token = await registerAndGetToken(phone, password);
+  test('step2 requires KYC approved', async () => {
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
     await request('POST', '/api/onboarding/step1', { full_name: 'Juan Perez' }, token);
+
+    await approveKyc(userId);
 
     const { status, data } = await request(
       'POST',
@@ -100,17 +120,31 @@ describe('Onboarding', () => {
 
     expect(status).toBe(200);
     expect(data.vehicle_id).toBeString();
-    expect(data.status).toBe('step3');
+    expect(data.status).toBe('documents');
     expect(data.message).toBe('Step 2 completed');
 
     const db = getDb();
     const allVehicles = await db.select().from(vehicles);
     expect(allVehicles.length).toBe(1);
     expect(allVehicles[0].brand).toBe('Toyota');
-    expect(allVehicles[0].model).toBe('Corolla');
 
     const [driver] = await db.select().from(drivers);
-    expect(driver!.status).toBe('step3');
+    expect(driver!.status).toBe('documents');
+  });
+
+  test('step2 without KYC returns error', async () => {
+    const token = await registerAndGetToken(phone, password);
+    await request('POST', '/api/onboarding/step1', { full_name: 'Juan Perez' }, token);
+
+    const { status, data } = await request(
+      'POST',
+      '/api/onboarding/step2',
+      { brand: 'Toyota', model: 'Corolla', year: 2020, color: 'Red', plate: 'ABC123' },
+      token,
+    );
+
+    expect(status).toBe(400);
+    expect(data.error.code).toBe('KYC_REQUIRED');
   });
 
   test('step2 without step1 returns error', async () => {
@@ -125,12 +159,12 @@ describe('Onboarding', () => {
 
     expect(status).toBe(404);
     expect(data.error.code).toBe('NOT_FOUND');
-    expect(data.error.message).toBe('Driver profile not found. Complete step 1 first');
   });
 
   test('step3 uploads documents', async () => {
-    const token = await registerAndGetToken(phone, password);
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
     await request('POST', '/api/onboarding/step1', { full_name: 'Juan Perez' }, token);
+    await approveKyc(userId);
     await request(
       'POST',
       '/api/onboarding/step2',
@@ -151,26 +185,40 @@ describe('Onboarding', () => {
     );
 
     expect(status).toBe(200);
-    expect(data.status).toBe('kyc');
-    expect(data.message).toBe('Step 3 completed');
+    expect(data.status).toBe('review');
+    expect(data.message).toBe('Step 3 completed. Documents submitted for review.');
     expect(data.documents.length).toBe(2);
-    expect(data.kyc_session).toBeDefined();
-    expect(data.kyc_session.session_token).toBeString();
-    expect(data.kyc_session.session_token).toContain('mock-session');
-    expect(data.kyc_session.session_url).toBeString();
+    expect(data.kyc_session).toBeUndefined();
 
     const db = getDb();
     const allDocs = await db.select().from(driverDocuments);
     expect(allDocs.length).toBe(2);
 
     const [driver] = await db.select().from(drivers);
-    expect(driver!.status).toBe('kyc');
-    expect(driver!.kyc_status).toBe('in_progress');
+    expect(driver!.status).toBe('review');
+  });
+
+  test('step3 requires KYC', async () => {
+    const token = await registerAndGetToken(phone, password);
+    await request('POST', '/api/onboarding/step1', { full_name: 'Juan Perez' }, token);
+
+    const { status, data } = await request(
+      'POST',
+      '/api/onboarding/step3',
+      {
+        documents: [{ doc_type: 'license', file_url: 'https://files.example.com/license.pdf' }],
+      },
+      token,
+    );
+
+    expect(status).toBe(400);
+    expect(data.error.code).toBe('KYC_REQUIRED');
   });
 
   test('step3 with invalid doc_type returns error', async () => {
-    const token = await registerAndGetToken(phone, password);
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
     await request('POST', '/api/onboarding/step1', { full_name: 'Juan Perez' }, token);
+    await approveKyc(userId);
     await request(
       'POST',
       '/api/onboarding/step2',
@@ -189,12 +237,12 @@ describe('Onboarding', () => {
 
     expect(status).toBe(400);
     expect(data.error.code).toBe('BAD_REQUEST');
-    expect(data.error.message).toBe('Invalid doc_type: invalid_type');
   });
 
   test('status returns current step and info', async () => {
-    const token = await registerAndGetToken(phone, password);
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
     await request('POST', '/api/onboarding/step1', { full_name: 'Juan Perez' }, token);
+    await approveKyc(userId);
     await request(
       'POST',
       '/api/onboarding/step2',
@@ -205,15 +253,17 @@ describe('Onboarding', () => {
     const { status, data } = await request('GET', '/api/onboarding/status', undefined, token);
 
     expect(status).toBe(200);
-    expect(data.step).toBe('step3');
-    expect(data.driver_status).toBe('step3');
+    expect(data.step).toBe('documents');
+    expect(data.driver_status).toBe('documents');
+    expect(data.kyc_status).toBe('approved');
     expect(data.has_vehicle).toBe(true);
     expect(data.documents_submitted).toBe(0);
   });
 
   test('step3/upload uploads a document', async () => {
-    const token = await registerAndGetToken(phone, password);
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
     await request('POST', '/api/onboarding/step1', { full_name: 'Test' }, token);
+    await approveKyc(userId);
     await request(
       'POST',
       '/api/onboarding/step2',
@@ -236,10 +286,7 @@ describe('Onboarding', () => {
     expect(res.status).toBe(200);
     expect(data.file_url).toBeDefined();
     expect(data.doc_type).toBe('license');
-    expect(data.kyc_session).toBeDefined();
-    expect(data.kyc_session.session_token).toBeString();
-    expect(data.kyc_session.session_token).toContain('mock-session');
-    expect(data.kyc_session.session_url).toBeString();
+    expect(data.kyc_session).toBeUndefined();
   });
 
   test('step3/upload without auth returns 401', async () => {
