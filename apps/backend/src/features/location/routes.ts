@@ -6,15 +6,24 @@ import { getDriverIdByUserId, upsertLocation } from './service';
 
 export const locationWsPlugin = new Elysia().ws('/ws/location', {
   async open(ws) {
+    // Store a promise that resolves with the driverId once auth completes.
+    // The message handler awaits this promise so it never races open().
+    let resolveReady: (driverId: string | null) => void;
+    (ws.data as any).ready = new Promise<string | null>((resolve) => {
+      resolveReady = resolve;
+    });
+
     const token = ws.data.query?.token;
     if (!token) {
       ws.close(4001, 'Unauthorized');
+      resolveReady!(null);
       return;
     }
 
     const result = await verifyAccess(token);
     if (!result.ok) {
       ws.close(4001, 'Unauthorized');
+      resolveReady!(null);
       return;
     }
 
@@ -23,10 +32,12 @@ export const locationWsPlugin = new Elysia().ws('/ws/location', {
     const driverId = await getDriverIdByUserId(result.payload.sub).catch(() => null);
     if (!driverId) {
       ws.close(4001, 'No driver profile');
+      resolveReady!(null);
       return;
     }
 
     (ws.data as any).driverId = driverId;
+    resolveReady!(driverId);
   },
   async message(ws, message: any) {
     let data = message;
@@ -40,13 +51,12 @@ export const locationWsPlugin = new Elysia().ws('/ws/location', {
 
     if (typeof data.lat !== 'number' || typeof data.lng !== 'number') return;
 
-    let driverId = (ws.data as any).driverId;
+    // Use the cached driverId, or wait for the open handler to finish.
+    let driverId = (ws.data as any).driverId as string | undefined;
     if (!driverId) {
-      const userId = (ws.data as any).userId;
-      if (!userId) return;
-      driverId = await getDriverIdByUserId(userId).catch(() => null);
+      const ready = (ws.data as any).ready as Promise<string | null> | undefined;
+      driverId = (ready ? await ready : null) ?? undefined;
       if (!driverId) return;
-      (ws.data as any).driverId = driverId;
     }
 
     await upsertLocation(driverId, data.lat, data.lng, data.heading);
