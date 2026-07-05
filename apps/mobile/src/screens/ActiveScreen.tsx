@@ -1,11 +1,13 @@
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiClient } from '../api/client';
 import { MapView } from '../components/MapView';
+import { SideMenu } from '../components/SideMenu';
 import { Toggle } from '../components/Toggle';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { useSignOut } from '../hooks/useAuth';
 import { startTracking, stopTracking } from '../lib/location';
 import { subscribeToDriverChannel } from '../lib/realtime';
 import { useAuthStore } from '../store/authStore';
@@ -18,7 +20,9 @@ export const ActiveScreen: React.FC = () => {
   const setOnline = useOnlineStore((s) => s.setOnline);
   const driverId = useAuthStore((s) => s.driverId);
   const [toggleError, setToggleError] = useState<string | null>(null);
+  const [menuVisible, setMenuVisible] = useState(false);
   const disconnectedRef = useRef(false);
+  const signOut = useSignOut();
 
   useEffect(() => {
     const heartbeatInterval = setInterval(() => {
@@ -74,6 +78,39 @@ export const ActiveScreen: React.FC = () => {
     [setOnline, navigation],
   );
 
+  const menuItems = useMemo(
+    () => [
+      {
+        label: 'Inicio',
+        icon: '🏠',
+        onPress: () => {},
+      },
+      {
+        label: 'Ganancias',
+        icon: '💰',
+        onPress: () => navigation.navigate('Earnings'),
+      },
+      {
+        label: 'Metodo de cobro',
+        icon: '💳',
+        onPress: () => navigation.navigate('PaymentMethod'),
+      },
+      {
+        label: 'Perfil',
+        icon: '👤',
+        onPress: () => navigation.navigate('Profile'),
+      },
+      {
+        label: 'Cerrar sesion',
+        icon: '🚪',
+        onPress: () => signOut.mutateAsync(),
+        danger: true,
+        dividerTop: true,
+      },
+    ],
+    [navigation, signOut],
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={theme.colors.deepBlue} />
@@ -81,14 +118,22 @@ export const ActiveScreen: React.FC = () => {
       <MapView style={StyleSheet.absoluteFill as any} followUserLocation />
 
       <View style={[styles.header, { paddingTop: insets.top }]}>
-        <TouchableOpacity style={styles.menuButton} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.menuButton}
+          activeOpacity={0.7}
+          onPress={() => setMenuVisible(true)}
+        >
           <Text style={styles.menuIcon}>☰</Text>
         </TouchableOpacity>
         <View style={styles.headerRight}>
           <View style={styles.connectedBadge}>
             <Text style={styles.connectedBadgeText}>Conectado</Text>
           </View>
-          <TouchableOpacity style={styles.avatarButton} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.avatarButton}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('Profile')}
+          >
             <Text style={styles.avatarText}>👤</Text>
           </TouchableOpacity>
         </View>
@@ -102,6 +147,8 @@ export const ActiveScreen: React.FC = () => {
         <Text style={styles.statusOffline}>Desconectado</Text>
         {toggleError && <Text style={styles.errorText}>{toggleError}</Text>}
       </View>
+
+      <SideMenu visible={menuVisible} onClose={() => setMenuVisible(false)} menuItems={menuItems} />
     </View>
   );
 };

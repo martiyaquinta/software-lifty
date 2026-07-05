@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiClient, getValidated } from '../api/client';
@@ -8,10 +8,12 @@ import { earningsDailySchema } from '../api/types';
 import type { EarningsDaily } from '../api/types';
 import { Card } from '../components/Card';
 import { MapView } from '../components/MapView';
+import { SideMenu } from '../components/SideMenu';
 import { TabBar } from '../components/TabBar';
 import { Toggle } from '../components/Toggle';
 import { SkeletonCard } from '../components/feedback/SkeletonCard';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { useSignOut } from '../hooks/useAuth';
 import { stopTracking } from '../lib/location';
 import { useOnlineStore } from '../store/onlineStore';
 import { theme } from '../theme';
@@ -23,6 +25,8 @@ export const OnlineScreen: React.FC = () => {
   const setOnline = useOnlineStore((s) => s.setOnline);
   const [activeTab, setActiveTab] = useState<'home' | 'earnings' | 'profile'>('home');
   const [toggleError, setToggleError] = useState<string | null>(null);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const signOut = useSignOut();
 
   const {
     data: earnings,
@@ -65,6 +69,43 @@ export const OnlineScreen: React.FC = () => {
     if (tab === 'earnings') navigation.navigate('Earnings');
     if (tab === 'profile') navigation.navigate('Profile');
   };
+
+  const menuItems = useMemo(
+    () => [
+      {
+        label: 'Inicio',
+        icon: '🏠',
+        onPress: () => {
+          if (isOnline) {
+            navigation.navigate('Active');
+          }
+        },
+      },
+      {
+        label: 'Ganancias',
+        icon: '💰',
+        onPress: () => navigation.navigate('Earnings'),
+      },
+      {
+        label: 'Metodo de cobro',
+        icon: '💳',
+        onPress: () => navigation.navigate('PaymentMethod'),
+      },
+      {
+        label: 'Perfil',
+        icon: '👤',
+        onPress: () => navigation.navigate('Profile'),
+      },
+      {
+        label: 'Cerrar sesion',
+        icon: '🚪',
+        onPress: () => signOut.mutateAsync(),
+        danger: true,
+        dividerTop: true,
+      },
+    ],
+    [navigation, signOut, isOnline],
+  );
 
   const formatCurrency = (amount: number) =>
     `$${amount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -126,11 +167,19 @@ export const OnlineScreen: React.FC = () => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={theme.colors.deepBlue} />
       <View style={[styles.header, { paddingTop: insets.top }]}>
-        <TouchableOpacity style={styles.menuButton} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.menuButton}
+          activeOpacity={0.7}
+          onPress={() => setMenuVisible(true)}
+        >
           <Text style={styles.menuIcon}>☰</Text>
         </TouchableOpacity>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.avatarButton} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.avatarButton}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('Profile')}
+          >
             <Text style={styles.avatarText}>👤</Text>
           </TouchableOpacity>
         </View>
@@ -155,6 +204,8 @@ export const OnlineScreen: React.FC = () => {
       </View>
 
       <TabBar activeTab={activeTab} onTabPress={handleTabPress} />
+
+      <SideMenu visible={menuVisible} onClose={() => setMenuVisible(false)} menuItems={menuItems} />
     </View>
   );
 };

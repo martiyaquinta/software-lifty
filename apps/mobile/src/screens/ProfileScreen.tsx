@@ -20,6 +20,7 @@ import { Input } from '../components/Input';
 import { TabBar } from '../components/TabBar';
 import { useAppNavigation } from '../hooks/useAppNavigation';
 import { useSignOut } from '../hooks/useAuth';
+import { useOnlineStore } from '../store/onlineStore';
 import { theme } from '../theme';
 import { compressImage } from '../utils/image';
 import { uploadPhotoToBackend } from '../utils/upload';
@@ -73,6 +74,7 @@ function isRealUrl(url: string | null): url is string {
 export const ProfileScreen: React.FC = () => {
   const navigation = useAppNavigation();
   const signOut = useSignOut();
+  const isOnline = useOnlineStore((s) => s.isOnline);
   const [activeTab, setActiveTab] = useState<'home' | 'earnings' | 'profile'>('profile');
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -105,7 +107,7 @@ export const ProfileScreen: React.FC = () => {
 
   const handleTabPress = (tab: 'home' | 'earnings' | 'profile') => {
     setActiveTab(tab);
-    if (tab === 'home') navigation.navigate('Online');
+    if (tab === 'home') navigation.navigate(isOnline ? 'Active' : 'Online');
     if (tab === 'earnings') navigation.navigate('Earnings');
   };
 
