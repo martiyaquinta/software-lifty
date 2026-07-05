@@ -31,12 +31,15 @@ const MAP_HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body, #map { width: 100%; height: 100%; overflow: hidden; }
-  .pulsing-circle {
+  .maplibregl-ctrl-attrib {
+    font-size: 10px !important;
+  }
+  .pulsing-marker {
     width: 18px; height: 18px;
     background: rgba(0, 194, 179, 0.4);
     border: 2px solid #00C2B3;
@@ -47,77 +50,114 @@ const MAP_HTML = `<!DOCTYPE html>
     0% { transform: scale(0.5); opacity: 0.8; }
     100% { transform: scale(2.5); opacity: 0; }
   }
+  .custom-marker {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    border: 2px solid #FFFFFF;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+  .marker-label {
+    position: absolute;
+    bottom: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(255,255,255,0.9);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: #333;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
 <div id="map"></div>
 <script>
-  var map = L.map('map', {
+  var DEFAULT_CENTER = [-65.1833, -31.9333];
+  var DEFAULT_ZOOM = 15;
+
+  var map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://tiles.openfreemap.org/styles/liberty',
+    center: DEFAULT_CENTER,
+    zoom: DEFAULT_ZOOM,
     attributionControl: true,
-    zoomControl: true,
   });
 
-  L.tileLayer('https://tiles.openfreemap.org/planet/{z}/{x}/{y}.png', {
-    attribution: '\\u00a9 <a href="https://openfreemap.org">OpenFreeMap</a>, \\u00a9 <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19,
-  }).addTo(map);
+  map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-  var DEFAULT_CENTER = [-31.9333, -65.1833];
-  var DEFAULT_ZOOM = 15;
-  var markers = [];
-  var routePolyline = null;
+  var routeSourceId = 'route-source';
+  var routeLayerId = 'route-layer';
 
-  function setView(center, zoom) {
-    map.setView(center, zoom);
-  }
+  map.on('load', function () {
+    map.addSource(routeSourceId, {
+      type: 'geojson',
+      data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } },
+    });
+
+    map.addLayer({
+      id: routeLayerId,
+      type: 'line',
+      source: routeSourceId,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': '#00C2B3', 'line-width': 4, 'line-opacity': 0.9 },
+    });
+  });
+
+  var existingMarkers = [];
+  var userMarker = null;
+  var watchId = null;
 
   function updateMarkers(newMarkers) {
-    markers.forEach(function (m) { map.removeLayer(m); });
-    markers = [];
+    existingMarkers.forEach(function (m) { m.remove(); });
+    existingMarkers = [];
+
     newMarkers.forEach(function (mk) {
       var color = mk.color || '#00C2B3';
-      var circle = L.circleMarker([mk.coordinate[1], mk.coordinate[0]], {
-        radius: 8,
-        fillColor: color,
-        color: '#FFFFFF',
-        weight: 2,
-        fillOpacity: 1,
-        opacity: 1,
-      }).addTo(map);
+      var el = document.createElement('div');
+      el.className = 'custom-marker';
+      el.style.backgroundColor = color;
+
       if (mk.title) {
-        circle.bindTooltip(mk.title, {
-          direction: 'top',
-          offset: [0, -10],
-        });
+        var label = document.createElement('span');
+        label.className = 'marker-label';
+        label.textContent = mk.title;
+        el.appendChild(label);
       }
-      circle.id = mk.id;
-      circle.on('click', function () {
+
+      var marker = new maplibregl.Marker({ element: el })
+        .setLngLat([mk.coordinate[0], mk.coordinate[1]])
+        .addTo(map);
+
+      el.addEventListener('click', function () {
         window.ReactNativeWebView.postMessage(JSON.stringify({
           type: 'markerClick',
           id: mk.id,
         }));
       });
-      markers.push(circle);
+
+      existingMarkers.push(marker);
     });
   }
 
   function updateRoute(coordinates) {
-    if (routePolyline) {
-      map.removeLayer(routePolyline);
-      routePolyline = null;
-    }
-    if (coordinates && coordinates.length >= 2) {
-      var latlngs = coordinates.map(function (c) { return [c[1], c[0]]; });
-      routePolyline = L.polyline(latlngs, {
-        color: '#00C2B3',
-        weight: 3,
-        opacity: 0.9,
-      }).addTo(map);
-    }
-  }
+    if (!map.getSource(routeSourceId)) return;
 
-  var userMarker = null;
-  var watchId = null;
+    var geojson = {
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        type: 'LineString',
+        coordinates: (coordinates && coordinates.length >= 2)
+          ? coordinates.map(function (c) { return [c[0], c[1]]; })
+          : [],
+      },
+    };
+
+    map.getSource(routeSourceId).setData(geojson);
+  }
 
   function startFollowUser() {
     if (!navigator.geolocation) return;
@@ -129,10 +169,13 @@ const MAP_HTML = `<!DOCTYPE html>
         var lng = pos.coords.longitude;
 
         if (!userMarker) {
-          var icon = L.divIcon({ className: 'pulsing-circle', iconSize: [18, 18], iconAnchor: [9, 9] });
-          userMarker = L.marker([lat, lng], { icon: icon }).addTo(map);
+          var el = document.createElement('div');
+          el.className = 'pulsing-marker';
+          userMarker = new maplibregl.Marker({ element: el })
+            .setLngLat([lng, lat])
+            .addTo(map);
         } else {
-          userMarker.setLatLng([lat, lng]);
+          userMarker.setLngLat([lng, lat]);
         }
       },
       function () {},
@@ -146,7 +189,7 @@ const MAP_HTML = `<!DOCTYPE html>
       watchId = null;
     }
     if (userMarker) {
-      map.removeLayer(userMarker);
+      userMarker.remove();
       userMarker = null;
     }
   }
@@ -170,7 +213,10 @@ const MAP_HTML = `<!DOCTYPE html>
 
     switch (msg.type) {
       case 'init':
-        setView(msg.center || DEFAULT_CENTER, msg.zoom || DEFAULT_ZOOM);
+        map.jumpTo({
+          center: msg.center || DEFAULT_CENTER,
+          zoom: msg.zoom || DEFAULT_ZOOM,
+        });
         break;
       case 'markers':
         updateMarkers(msg.markers || []);
@@ -185,8 +231,9 @@ const MAP_HTML = `<!DOCTYPE html>
     }
   });
 
-  setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
+  map.once('idle', function () {
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
+  });
 
   window.addEventListener('error', function (e) {
     window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -215,7 +262,7 @@ export const MapView: React.FC<MapViewProps> = ({
     webViewRef.current.postMessage(
       JSON.stringify({
         type: 'init',
-        center: [centerCoordinate[1], centerCoordinate[0]],
+        center: centerCoordinate,
         zoom: zoom,
       }),
     );
@@ -290,6 +337,7 @@ export const MapView: React.FC<MapViewProps> = ({
         scrollEnabled={false}
         bounces={false}
         overScrollMode="never"
+        originWhitelist={['*']}
       />
       {!isLoaded && (
         <View style={styles.loadingOverlay}>
