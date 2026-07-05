@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiClient } from '../api/client';
 import { MapView } from '../components/MapView';
@@ -21,8 +21,18 @@ export const ActiveScreen: React.FC = () => {
   const driverId = useAuthStore((s) => s.driverId);
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const disconnectedRef = useRef(false);
   const signOut = useSignOut();
+
+  useEffect(() => {
+    apiClient
+      .get('/drivers/me')
+      .then((res) => {
+        setAvatarUrl(res.data?.avatar_url ?? null);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const heartbeatInterval = setInterval(() => {
@@ -134,7 +144,11 @@ export const ActiveScreen: React.FC = () => {
             activeOpacity={0.7}
             onPress={() => navigation.navigate('Profile')}
           >
-            <Text style={styles.avatarText}>👤</Text>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>👤</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -205,6 +219,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.mediumGray,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radius.full,
   },
   avatarText: {
     fontSize: 20,

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
-import { useCallback, useMemo, useState } from 'react';
-import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiClient, getValidated } from '../api/client';
 import { earningsDailySchema } from '../api/types';
@@ -26,7 +26,17 @@ export const OnlineScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'home' | 'earnings' | 'profile'>('home');
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const signOut = useSignOut();
+
+  useEffect(() => {
+    apiClient
+      .get('/drivers/me')
+      .then((res) => {
+        setAvatarUrl(res.data?.avatar_url ?? null);
+      })
+      .catch(() => {});
+  }, []);
 
   const {
     data: earnings,
@@ -180,7 +190,11 @@ export const OnlineScreen: React.FC = () => {
             activeOpacity={0.7}
             onPress={() => navigation.navigate('Profile')}
           >
-            <Text style={styles.avatarText}>👤</Text>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>👤</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -246,6 +260,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.mediumGray,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radius.full,
   },
   avatarText: {
     fontSize: 20,
