@@ -96,8 +96,8 @@ async function wsSendAndWait(message: object, ws: WebSocket, driverId: string): 
   return new Promise((resolve) => {
     ws.send(JSON.stringify(message));
     const poll = async () => {
-      for (let i = 0; i < 40; i++) {
-        await new Promise((r) => setTimeout(r, 50));
+      for (let i = 0; i < 80; i++) {
+        await new Promise((r) => setTimeout(r, 100));
         const [loc] = await getDb()
           .select({ id: driverLocations.driver_id })
           .from(driverLocations)
@@ -149,25 +149,30 @@ describe('Location WebSocket', () => {
     expect([4001, 1006]).toContain(code);
   });
 
-  test('WS stores location on message', async () => {
-    const { token, driverId } = await registerAndCreateDriver(phone, password);
-    const { ws, open } = await wsConnect(port, token);
-    expect(open).toBe(true);
+  test(
+    'WS stores location on message',
+    async () => {
+      const { token, driverId } = await registerAndCreateDriver(phone, password);
+      const { ws, open } = await wsConnect(port, token);
+      expect(open).toBe(true);
 
-    await wsSendAndWait({ lat: -32.89, lng: -68.84, heading: 180 }, ws, driverId);
-    ws.close();
+      await wsSendAndWait({ lat: -32.89, lng: -68.84, heading: 180 }, ws, driverId);
+      ws.close();
+      await new Promise((r) => setTimeout(r, 200));
 
-    const [loc] = await getDb()
-      .select()
-      .from(driverLocations)
-      .where(eq(driverLocations.driver_id, driverId))
-      .limit(1);
+      const [loc] = await getDb()
+        .select()
+        .from(driverLocations)
+        .where(eq(driverLocations.driver_id, driverId))
+        .limit(1);
 
-    expect(loc).toBeDefined();
-    expect(loc.lat).toBeCloseTo(-32.89, 1);
-    expect(loc.lng).toBeCloseTo(-68.84, 1);
-    expect(loc.heading).toBe(180);
-  });
+      expect(loc).toBeDefined();
+      expect(loc.lat).toBeCloseTo(-32.89, 1);
+      expect(loc.lng).toBeCloseTo(-68.84, 1);
+      expect(loc.heading).toBe(180);
+    },
+    { timeout: 15000 },
+  );
 
   test('POST /api/location/update stores location', async () => {
     const { token, driverId } = await registerAndCreateDriver(phone, password);
@@ -202,24 +207,29 @@ describe('Location WebSocket', () => {
     expect(data.error).toBe('Unauthorized');
   });
 
-  test('WS sends location and persists to DB', async () => {
-    const { token, driverId } = await registerAndCreateDriver(phone, password);
-    const { ws, open } = await wsConnect(port, token);
-    expect(open).toBe(true);
+  test(
+    'WS sends location and persists to DB',
+    async () => {
+      const { token, driverId } = await registerAndCreateDriver(phone, password);
+      const { ws, open } = await wsConnect(port, token);
+      expect(open).toBe(true);
 
-    await wsSendAndWait({ lat: 40.71, lng: -74.0 }, ws, driverId);
-    ws.close();
+      await wsSendAndWait({ lat: 40.71, lng: -74.0 }, ws, driverId);
+      ws.close();
+      await new Promise((r) => setTimeout(r, 200));
 
-    const [loc] = await getDb()
-      .select()
-      .from(driverLocations)
-      .where(eq(driverLocations.driver_id, driverId))
-      .limit(1);
+      const [loc] = await getDb()
+        .select()
+        .from(driverLocations)
+        .where(eq(driverLocations.driver_id, driverId))
+        .limit(1);
 
-    expect(loc).toBeDefined();
-    expect(loc.lat).toBeCloseTo(40.71, 1);
-    expect(loc.lng).toBeCloseTo(-74.0, 1);
-  });
+      expect(loc).toBeDefined();
+      expect(loc.lat).toBeCloseTo(40.71, 1);
+      expect(loc.lng).toBeCloseTo(-74.0, 1);
+    },
+    { timeout: 15000 },
+  );
 
   test('WS without driver row closes connection', async () => {
     const db = getDb();

@@ -1,5 +1,6 @@
 import { swagger } from '@elysiajs/swagger';
 import { Elysia } from 'elysia';
+import { adminRoutes } from './features/admin/routes';
 import { authRoutes } from './features/auth/routes';
 import { districtsRoutes } from './features/districts/routes';
 import { driversRoutes } from './features/drivers/routes';
@@ -91,6 +92,7 @@ export function createApp() {
     .group('/api', (app) =>
       app
         .use(authRoutes)
+        .use(adminRoutes)
         .use(paymentMethodsRoutes)
         .use(onboardingRoutes)
         .use(kycRoutes)

@@ -25,6 +25,15 @@ async function getOrThrow(user: AuthUser) {
   return driver;
 }
 
+async function getUserKycStatus(userId: string): Promise<string> {
+  const [u] = await db
+    .select({ kyc_status: users.kyc_status })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return u?.kyc_status ?? 'pending';
+}
+
 async function createKycSession(userId: string): Promise<{
   session_token: string;
   session_url: string;
@@ -48,22 +57,6 @@ export const onboardingService = {
       .where(eq(drivers.user_id, user.id))
       .limit(1);
 
-    if (existing) {
-      await db
-        .update(drivers)
-        .set({ status: 'step2', updated_at: new Date() })
-        .where(eq(drivers.id, existing.id));
-
-      if (fullName) {
-        await db
-          .update(users)
-          .set({ full_name: fullName, updated_at: new Date() })
-          .where(eq(users.id, user.id));
-      }
-
-      return { id: existing.id, status: 'step2', message: 'Step 1 completed' };
-    }
-
     if (fullName) {
       await db
         .update(users)
@@ -71,14 +64,37 @@ export const onboardingService = {
         .where(eq(users.id, user.id));
     }
 
+    if (existing) {
+      await db
+        .update(drivers)
+        .set({ status: 'kyc_pending', updated_at: new Date() })
+        .where(eq(drivers.id, existing.id));
+
+      const kycSession = await createKycSession(user.id);
+
+      return {
+        id: existing.id,
+        status: 'kyc_pending',
+        message: 'Step 1 completed. KYC required next.',
+        kyc_session: kycSession,
+      };
+    }
+
     const [newDriver] = await db
       .insert(drivers)
-      .values({ user_id: user.id, status: 'step2' })
+      .values({ user_id: user.id, status: 'kyc_pending' })
       .returning({ id: drivers.id });
 
     if (!newDriver) throw new AppError('Failed to create driver profile', 400, 'BAD_REQUEST');
 
-    return { id: newDriver.id, status: 'step2', message: 'Step 1 completed' };
+    const kycSession = await createKycSession(user.id);
+
+    return {
+      id: newDriver.id,
+      status: 'kyc_pending',
+      message: 'Step 1 completed. KYC required next.',
+      kyc_session: kycSession,
+    };
   },
 
   async step2(
@@ -93,6 +109,15 @@ export const onboardingService = {
     },
   ) {
     const driver = await getOrThrow(user);
+
+    const kycStatus = await getUserKycStatus(user.id);
+    if (kycStatus !== 'approved') {
+      throw new AppError(
+        'KYC verification must be completed before adding a vehicle',
+        400,
+        'KYC_REQUIRED',
+      );
+    }
 
     const [vehicle] = await db
       .insert(vehicles)
@@ -111,14 +136,23 @@ export const onboardingService = {
 
     await db
       .update(drivers)
-      .set({ status: 'step3', updated_at: new Date() })
+      .set({ status: 'documents', updated_at: new Date() })
       .where(eq(drivers.id, driver.id));
 
-    return { vehicle_id: vehicle.id, status: 'step3', message: 'Step 2 completed' };
+    return { vehicle_id: vehicle.id, status: 'documents', message: 'Step 2 completed' };
   },
 
   async step3(user: AuthUser, docs: { doc_type: string; file_url: string }[]) {
     const driver = await getOrThrow(user);
+
+    const kycStatus = await getUserKycStatus(user.id);
+    if (kycStatus !== 'approved') {
+      throw new AppError(
+        'KYC verification must be completed before uploading documents',
+        400,
+        'KYC_REQUIRED',
+      );
+    }
 
     for (const d of docs) {
       if (!VALID_DOC_TYPES.includes(d.doc_type)) {
@@ -145,21 +179,27 @@ export const onboardingService = {
 
     await db
       .update(drivers)
-      .set({ status: 'kyc', kyc_status: 'in_progress', updated_at: new Date() })
+      .set({ status: 'review', updated_at: new Date() })
       .where(eq(drivers.id, driver.id));
-
-    const kycSession = await createKycSession(user.id);
 
     return {
       documents: created,
-      status: 'kyc',
-      message: 'Step 3 completed',
-      kyc_session: kycSession,
+      status: 'review',
+      message: 'Step 3 completed. Documents submitted for review.',
     };
   },
 
   async uploadDocument(user: AuthUser, file: File, docType: string) {
     const driver = await getOrThrow(user);
+
+    const kycStatus = await getUserKycStatus(user.id);
+    if (kycStatus !== 'approved') {
+      throw new AppError(
+        'KYC verification must be completed before uploading documents',
+        400,
+        'KYC_REQUIRED',
+      );
+    }
 
     if (!VALID_DOC_TYPES.includes(docType)) {
       throw new AppError(`Invalid doc_type: ${docType}`, 400, 'BAD_REQUEST');
@@ -187,22 +227,22 @@ export const onboardingService = {
 
     await db
       .update(drivers)
-      .set({ status: 'kyc', kyc_status: 'in_progress', updated_at: new Date() })
+      .set({ status: 'review', updated_at: new Date() })
       .where(eq(drivers.id, driver.id));
 
-    const kycSession = await createKycSession(user.id);
-
-    return { id: doc.id, doc_type: doc.doc_type, file_url: doc.file_url, kyc_session: kycSession };
+    return { id: doc.id, doc_type: doc.doc_type, file_url: doc.file_url };
   },
 
   async getStatus(user: AuthUser) {
     const [driver] = await db.select().from(drivers).where(eq(drivers.user_id, user.id)).limit(1);
 
+    const userKycStatus = await getUserKycStatus(user.id);
+
     if (!driver) {
       return {
         step: 'step1',
         driver_status: null,
-        kyc_status: null,
+        kyc_status: userKycStatus,
         has_vehicle: false,
         documents_submitted: 0,
       };
@@ -222,7 +262,7 @@ export const onboardingService = {
     return {
       step: driver.status,
       driver_status: driver.status,
-      kyc_status: driver.kyc_status,
+      kyc_status: userKycStatus,
       has_vehicle: vehicleList.length > 0,
       documents_submitted: docsList.length,
     };
