@@ -22,6 +22,30 @@ bun test             # correr tests (194 tests, 17 suites)
 - `POST /auth/logout` → revoca todos los refresh tokens
 - Variables requeridas: `JWT_SECRET` (min 32 chars), `RESEND_API_KEY`, `DATABASE_URL`
 
+## Conexión a la DB (`DATABASE_URL`)
+
+La app conecta a Postgres via `pg` Pool (`src/shared/db/client.ts`). **Usar siempre el connection pooler de Supabase**, no el host directo.
+
+### Por qué no el host directo
+El host directo `db.<ref>.supabase.co` es **IPv6-only** (salvo que se pague el IPv4 add-on). En redes sin IPv6 falla con `getaddrinfo ENOTFOUND` y toda query a la DB revienta (ej: `POST /auth/login` → "DB error looking up user"). El pooler `aws-<n>-<region>.pooler.supabase.com` resuelve a IPv4, así que anda en IPv4 y en dual-stack.
+
+### Dos puertos, dos usos
+El usuario del pooler es `postgres.<project-ref>` (no `postgres` a secas).
+
+| Puerto | Modo | Usar para |
+|--------|------|-----------|
+| **6543** | Transaction pooler | **Runtime de la app** (`DATABASE_URL`). Sin prepared statements ni estado de sesión — compatible con Drizzle + `pg`. |
+| **5432** | Session pooler | **Migraciones / Supabase CLI** y cualquier herramienta que necesite sesión (`supabase db push`, `LISTEN/NOTIFY`, etc.). |
+
+```bash
+# App (runtime) — puerto 6543
+DATABASE_URL=postgresql://postgres.<ref>:<pass>@aws-<n>-<region>.pooler.supabase.com:6543/postgres
+
+# Migraciones — misma cadena pero puerto 5432 (session mode)
+```
+
+La cadena exacta se copia del Dashboard → Settings → Database → Connection string (Transaction / Session pooler).
+
 ## Migraciones
 
 ### Setup inicial
