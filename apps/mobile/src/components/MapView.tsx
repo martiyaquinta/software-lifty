@@ -31,11 +31,18 @@ const MAP_HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body, #map { width: 100%; height: 100%; overflow: hidden; }
+  .marker-dot {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    border: 2px solid #FFFFFF;
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+  }
   .pulsing-circle {
     width: 18px; height: 18px;
     background: rgba(0, 194, 179, 0.4);
@@ -52,72 +59,94 @@ const MAP_HTML = `<!DOCTYPE html>
 <body>
 <div id="map"></div>
 <script>
-  var map = L.map('map', {
+  var DEFAULT_CENTER = [-65.1833, -31.9333];
+  var DEFAULT_ZOOM = 15;
+
+  var map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://tiles.openfreemap.org/styles/liberty',
+    center: DEFAULT_CENTER,
+    zoom: DEFAULT_ZOOM,
     attributionControl: true,
-    zoomControl: true,
   });
 
-  L.tileLayer('https://tiles.openfreemap.org/planet/{z}/{x}/{y}.png', {
-    attribution: '\\u00a9 <a href="https://openfreemap.org">OpenFreeMap</a>, \\u00a9 <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19,
-  }).addTo(map);
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
-  var DEFAULT_CENTER = [-31.9333, -65.1833];
-  var DEFAULT_ZOOM = 15;
+  var mapLoaded = false;
   var markers = [];
-  var routePolyline = null;
+  var userMarker = null;
+  var watchId = null;
+  var pendingRoute = null;
+  var followRequested = false;
 
   function setView(center, zoom) {
-    map.setView(center, zoom);
+    map.jumpTo({ center: center, zoom: zoom });
   }
 
   function updateMarkers(newMarkers) {
-    markers.forEach(function (m) { map.removeLayer(m); });
+    markers.forEach(function (m) { m.remove(); });
     markers = [];
     newMarkers.forEach(function (mk) {
       var color = mk.color || '#00C2B3';
-      var circle = L.circleMarker([mk.coordinate[1], mk.coordinate[0]], {
-        radius: 8,
-        fillColor: color,
-        color: '#FFFFFF',
-        weight: 2,
-        fillOpacity: 1,
-        opacity: 1,
-      }).addTo(map);
-      if (mk.title) {
-        circle.bindTooltip(mk.title, {
-          direction: 'top',
-          offset: [0, -10],
-        });
-      }
-      circle.id = mk.id;
-      circle.on('click', function () {
+      var el = document.createElement('div');
+      el.className = 'marker-dot';
+      el.style.background = color;
+      el.addEventListener('click', function () {
         window.ReactNativeWebView.postMessage(JSON.stringify({
           type: 'markerClick',
           id: mk.id,
         }));
       });
-      markers.push(circle);
+
+      var marker = new maplibregl.Marker({ element: el })
+        .setLngLat([mk.coordinate[0], mk.coordinate[1]]);
+
+      if (mk.title) {
+        marker.setPopup(new maplibregl.Popup({ offset: 16, closeButton: false }).setText(mk.title));
+      }
+
+      marker.addTo(map);
+      markers.push(marker);
     });
   }
 
-  function updateRoute(coordinates) {
-    if (routePolyline) {
-      map.removeLayer(routePolyline);
-      routePolyline = null;
-    }
-    if (coordinates && coordinates.length >= 2) {
-      var latlngs = coordinates.map(function (c) { return [c[1], c[0]]; });
-      routePolyline = L.polyline(latlngs, {
-        color: '#00C2B3',
-        weight: 3,
-        opacity: 0.9,
-      }).addTo(map);
+  var ROUTE_SOURCE_ID = 'route-line';
+  var ROUTE_LAYER_ID = 'route-line-layer';
+
+  function applyRoute(coordinates) {
+    var geojson = {
+      type: 'Feature',
+      properties: {},
+      geometry: { type: 'LineString', coordinates: coordinates || [] },
+    };
+
+    var existing = map.getSource(ROUTE_SOURCE_ID);
+    if (existing) {
+      existing.setData(geojson);
+    } else {
+      map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: geojson });
+      map.addLayer({
+        id: ROUTE_LAYER_ID,
+        type: 'line',
+        source: ROUTE_SOURCE_ID,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#00C2B3', 'line-width': 4, 'line-opacity': 0.9 },
+      });
     }
   }
 
-  var userMarker = null;
-  var watchId = null;
+  function updateRoute(coordinates) {
+    if (!coordinates || coordinates.length < 2) {
+      if (map.getLayer(ROUTE_LAYER_ID)) map.removeLayer(ROUTE_LAYER_ID);
+      if (map.getSource(ROUTE_SOURCE_ID)) map.removeSource(ROUTE_SOURCE_ID);
+      return;
+    }
+    if (!mapLoaded) {
+      pendingRoute = coordinates;
+      return;
+    }
+    applyRoute(coordinates);
+  }
 
   function startFollowUser() {
     if (!navigator.geolocation) return;
@@ -125,14 +154,15 @@ const MAP_HTML = `<!DOCTYPE html>
 
     watchId = navigator.geolocation.watchPosition(
       function (pos) {
-        var lat = pos.coords.latitude;
         var lng = pos.coords.longitude;
+        var lat = pos.coords.latitude;
 
         if (!userMarker) {
-          var icon = L.divIcon({ className: 'pulsing-circle', iconSize: [18, 18], iconAnchor: [9, 9] });
-          userMarker = L.marker([lat, lng], { icon: icon }).addTo(map);
+          var el = document.createElement('div');
+          el.className = 'pulsing-circle';
+          userMarker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
         } else {
-          userMarker.setLatLng([lat, lng]);
+          userMarker.setLngLat([lng, lat]);
         }
       },
       function () {},
@@ -146,10 +176,20 @@ const MAP_HTML = `<!DOCTYPE html>
       watchId = null;
     }
     if (userMarker) {
-      map.removeLayer(userMarker);
+      userMarker.remove();
       userMarker = null;
     }
   }
+
+  map.on('load', function () {
+    mapLoaded = true;
+    if (pendingRoute) {
+      applyRoute(pendingRoute);
+      pendingRoute = null;
+    }
+    if (followRequested) startFollowUser();
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
+  });
 
   map.on('moveend', function () {
     var c = map.getCenter();
@@ -157,6 +197,13 @@ const MAP_HTML = `<!DOCTYPE html>
       type: 'moved',
       center: { lng: c.lng, lat: c.lat },
       zoom: map.getZoom(),
+    }));
+  });
+
+  map.on('error', function (e) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      type: 'error',
+      message: (e && e.error && e.error.message) || 'Map error',
     }));
   });
 
@@ -179,14 +226,12 @@ const MAP_HTML = `<!DOCTYPE html>
         updateRoute(msg.coordinates || []);
         break;
       case 'followUser':
+        followRequested = !!msg.enabled;
         if (msg.enabled) startFollowUser();
         else stopFollowUser();
         break;
     }
   });
-
-  setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
 
   window.addEventListener('error', function (e) {
     window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -215,7 +260,7 @@ export const MapView: React.FC<MapViewProps> = ({
     webViewRef.current.postMessage(
       JSON.stringify({
         type: 'init',
-        center: [centerCoordinate[1], centerCoordinate[0]],
+        center: centerCoordinate,
         zoom: zoom,
       }),
     );
