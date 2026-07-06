@@ -1,11 +1,12 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { InteractionManager, StyleSheet, View } from 'react-native';
 import { apiClient } from '../src/api/client';
 import { driverStatusSchema } from '../src/api/types';
+import { AuthRedirectWatcher } from '../src/components/AuthRedirectWatcher';
 import { ConnectivityBanner } from '../src/components/feedback/ConnectivityBanner';
 import { ErrorBoundary } from '../src/components/feedback/ErrorBoundary';
 import { useAppNavigation } from '../src/hooks/useAppNavigation';
@@ -17,49 +18,6 @@ import {
 import { queryClient } from '../src/lib/queryClient';
 import { useAuthStore } from '../src/store/authStore';
 import { theme } from '../src/theme';
-
-const PUBLIC_ROUTES = ['', 'register', 'forgot-password'];
-
-function AuthRedirectWatcher() {
-  const needsRedirect = useAuthStore((s) => s.needsRedirect);
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const resetRedirect = useAuthStore((s) => s.resetRedirect);
-  const router = useRouter();
-  const segments = useSegments();
-
-  useEffect(() => {
-    if (needsRedirect) {
-      console.log(
-        '[AuthRedirectWatcher] needsRedirect triggered, segments:',
-        segments[0],
-        '→ replacing to /',
-      );
-      resetRedirect();
-      if (segments[0] !== undefined) {
-        InteractionManager.runAfterInteractions(() => {
-          router.replace('/');
-        });
-      }
-    }
-  }, [needsRedirect, resetRedirect, router, segments]);
-
-  useEffect(() => {
-    console.log(
-      '[AuthRedirectWatcher] isAuthenticated:',
-      isAuthenticated,
-      '| segments[0]:',
-      segments[0],
-    );
-    if (isAuthenticated && PUBLIC_ROUTES.includes(segments[0] ?? '')) {
-      console.log('[AuthRedirectWatcher] → redirecting to /online');
-      InteractionManager.runAfterInteractions(() => {
-        router.replace('/online');
-      });
-    }
-  }, [isAuthenticated, segments, router]);
-
-  return null;
-}
 
 function SessionRestore() {
   useEffect(() => {
