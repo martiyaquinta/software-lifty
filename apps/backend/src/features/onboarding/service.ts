@@ -35,6 +35,7 @@ async function getUserKycStatus(userId: string): Promise<string> {
 }
 
 async function createKycSession(userId: string): Promise<{
+  session_id: string;
   session_token: string;
   session_url: string;
 } | null> {

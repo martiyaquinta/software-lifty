@@ -1,6 +1,7 @@
 import type React from 'react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import { apiClient } from '../api/client';
 import { Button } from '../components/Button';
 import { Navbar } from '../components/Navbar';
 import { useAppNavigation } from '../hooks/useAppNavigation';
@@ -10,6 +11,9 @@ import { theme } from '../theme';
 export const KYCVerifyScreen: React.FC = () => {
   const navigation = useAppNavigation();
   const driverStatus = useAuthStore((s) => s.driverStatus);
+  const setKycSessionId = useAuthStore((s) => s.setKycSessionId);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (driverStatus === 'approved') {
@@ -18,6 +22,21 @@ export const KYCVerifyScreen: React.FC = () => {
       navigation.navigate('UnderReview');
     }
   }, [driverStatus]);
+
+  const handleStart = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data } = await apiClient.get('/kyc/me/session');
+      if (!data?.session_url) throw new Error('No se pudo iniciar la verificacion');
+      setKycSessionId(data.session_id ?? null);
+      navigation.navigate('KYCWebView', { url: data.session_url });
+    } catch (e: any) {
+      setError(e?.message ?? 'No se pudo iniciar la verificacion');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (driverStatus === 'approved' || driverStatus === 'under_review') {
     return null;
@@ -36,9 +55,11 @@ export const KYCVerifyScreen: React.FC = () => {
           Para garantizar la seguridad de todos, necesitamos verificar tu identidad con nuestro
           sistema DIDIT. Vas a necesitar tu DNI y acceso a la camara.
         </Text>
+        {error && <Text style={styles.error}>{error}</Text>}
         <Button
           title="COMENZAR VERIFICACION"
-          onPress={() => navigation.navigate('DNIScan')}
+          onPress={handleStart}
+          loading={loading}
           style={styles.button}
         />
         <Text style={styles.footer}>Verificacion por DIDIT</Text>
@@ -86,6 +107,12 @@ const styles = StyleSheet.create({
   },
   button: {
     width: 343,
+  },
+  error: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.dangerRed,
+    textAlign: 'center',
+    width: 280,
   },
   footer: {
     fontSize: theme.fontSize.xs,

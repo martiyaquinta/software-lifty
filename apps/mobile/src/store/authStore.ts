@@ -12,12 +12,14 @@ interface AuthState {
   needsRedirect: boolean;
   phone: string | null;
   driverStatus: DriverStatusValue;
+  kycSessionId: string | null;
   setTokens: (token: string, refreshToken: string) => void;
   setDriverId: (driverId: string) => void;
   clearAuth: () => void;
   resetRedirect: () => void;
   setPhone: (phone: string) => void;
   setDriverStatus: (status: DriverStatusValue) => void;
+  setKycSessionId: (sessionId: string | null) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -30,6 +32,7 @@ export const useAuthStore = create<AuthState>()(
       needsRedirect: false,
       phone: null,
       driverStatus: null,
+      kycSessionId: null,
       setTokens: (token, refreshToken) => set({ token, refreshToken, isAuthenticated: true }),
       setDriverId: (driverId) => set({ driverId }),
       clearAuth: () =>
@@ -41,10 +44,12 @@ export const useAuthStore = create<AuthState>()(
           needsRedirect: true,
           phone: null,
           driverStatus: null,
+          kycSessionId: null,
         }),
       resetRedirect: () => set({ needsRedirect: false }),
       setPhone: (phone) => set({ phone }),
       setDriverStatus: (driverStatus) => set({ driverStatus }),
+      setKycSessionId: (kycSessionId) => set({ kycSessionId }),
     }),
     {
       name: 'lifty-auth',
@@ -55,6 +60,7 @@ export const useAuthStore = create<AuthState>()(
         driverId: state.driverId,
         isAuthenticated: state.isAuthenticated,
         driverStatus: state.driverStatus,
+        kycSessionId: state.kycSessionId,
       }),
     },
   ),

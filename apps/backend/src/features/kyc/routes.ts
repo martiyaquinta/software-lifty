@@ -1,9 +1,8 @@
 import { Elysia } from 'elysia';
 import { verifyHmac } from '../../shared/lib/didit';
-import { sessionParams } from './schema';
-import { kycService } from './service';
-
 import { safeCall } from '../../shared/lib/route-utils';
+import { decisionParams, sessionParams } from './schema';
+import { kycService, mapKycStatus } from './service';
 
 function extractWebhookData(body: any): {
   userId: string;
@@ -12,19 +11,30 @@ function extractWebhookData(body: any): {
   fullName?: string;
 } {
   const userId = body.vendor_data || body.user_id || body.driver_id;
-  const status = body.status;
+  const status = mapKycStatus(body.status);
+
+  const idv = body.decision?.id_verifications?.[0] ?? body.result ?? body;
   const documentNumber =
-    body.document_number ||
-    body.documentNumber ||
-    body.result?.document_number ||
-    body.result?.documentNumber;
+    body.document_number || body.documentNumber || idv?.document_number || idv?.documentNumber;
   const fullName =
-    body.full_name || body.fullName || body.result?.full_name || body.result?.fullName;
+    body.full_name ||
+    body.fullName ||
+    idv?.full_name ||
+    idv?.fullName ||
+    [idv?.first_name, idv?.last_name].filter(Boolean).join(' ') ||
+    undefined;
 
   return { userId, status, documentNumber, fullName };
 }
 
 export const kycRoutes = new Elysia({ prefix: '/kyc' })
+  .get('/me/session', ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+    return safeCall(() => kycService.createUserSession(user), set);
+  })
   .get(
     '/session/:driver_id',
     ({ user, params, set }) => {
@@ -36,8 +46,25 @@ export const kycRoutes = new Elysia({ prefix: '/kyc' })
     },
     { params: sessionParams },
   )
+  .get(
+    '/decision/:session_id',
+    ({ user, params, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: 'Unauthorized' };
+      }
+      return safeCall(() => kycService.refreshDecision(user, params.session_id), set);
+    },
+    { params: decisionParams },
+  )
   .post('/webhook/didit', async ({ request, set }) => {
-    const signature = request.headers.get('X-Didit-Signature') || '';
+    // DIDIT sends X-Signature (raw-body HMAC) and X-Signature-V2 (canonical);
+    // X-Didit-Signature is kept for backward-compat / tests.
+    const signature =
+      request.headers.get('X-Signature') ||
+      request.headers.get('X-Signature-V2') ||
+      request.headers.get('X-Didit-Signature') ||
+      '';
     const text = await request.text();
     let body: any;
     try {

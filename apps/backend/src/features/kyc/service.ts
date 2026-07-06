@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import { and, eq, isNotNull, ne } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
 import { drivers, users } from '../../shared/db/schema';
-import { createSession } from '../../shared/lib/didit';
-import { AppError, NotFoundError } from '../../shared/lib/errors';
+import { createSession, getSessionDecision } from '../../shared/lib/didit';
+import { AppError, ForbiddenError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
 import type { AuthUser } from '../../shared/middleware/auth';
 
@@ -16,9 +16,28 @@ const VALID_STATUSES = [
   'expired',
 ];
 
+// DIDIT v3 status labels → internal kyc_status. Unknown/internal values pass
+// through unchanged (so an already-internal status or a bogus one is preserved).
+const DIDIT_STATUS_MAP: Record<string, string> = {
+  Approved: 'approved',
+  Declined: 'rejected',
+  'In Review': 'under_review',
+  'In Progress': 'in_progress',
+  'Not Started': 'pending',
+  Expired: 'expired',
+  'Kyc Expired': 'expired',
+};
+
+export function mapKycStatus(raw: string): string {
+  return DIDIT_STATUS_MAP[raw] ?? raw;
+}
+
+// Forward-only transitions. A real DIDIT flow can jump straight to a terminal
+// state (e.g. pending → approved), so every non-terminal state may advance to
+// any "later" state. Terminal states never transition out.
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-  pending: ['in_progress'],
-  in_progress: ['under_review'],
+  pending: ['in_progress', 'under_review', 'approved', 'rejected', 'expired'],
+  in_progress: ['under_review', 'approved', 'rejected', 'expired'],
   under_review: ['approved', 'rejected', 'expired'],
   approved: [],
   rejected: [],
@@ -39,6 +58,12 @@ export const kycService = {
 
     if (!driver) throw new NotFoundError('Driver not found or does not belong to you');
 
+    return createSession(user.id);
+  },
+
+  // KYC is user-level (vendor_data = user.id), so the app can start a session
+  // without knowing the driver row id.
+  async createUserSession(user: AuthUser) {
     return createSession(user.id);
   },
 
@@ -129,5 +154,47 @@ export const kycService = {
     }
 
     logger.info('[KYC]', userId.split('-')[0], user.kyc_status, '→', status);
+  },
+
+  // Dev/reconciliation path: DIDIT cannot deliver webhooks to localhost, so the
+  // mobile app calls this after the user returns from the hosted flow. It pulls
+  // the authoritative decision from DIDIT and applies it. Lenient: a no-op or
+  // not-yet-advanced status returns the current state instead of throwing.
+  async refreshDecision(user: AuthUser, sessionId: string) {
+    const decision = await getSessionDecision(sessionId);
+
+    if (decision.vendor_data && decision.vendor_data !== user.id) {
+      throw new ForbiddenError('Session does not belong to this user');
+    }
+
+    const mapped = mapKycStatus(decision.status);
+    const [row] = await db
+      .select({ kyc_status: users.kyc_status })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
+
+    if (!row) throw new NotFoundError('User not found');
+    const current = row.kyc_status;
+
+    if (!VALID_STATUSES.includes(mapped) || mapped === current) {
+      return { kyc_status: current, didit_status: decision.status };
+    }
+
+    const allowed = ALLOWED_TRANSITIONS[current] ?? [];
+    if (!allowed.includes(mapped)) {
+      return { kyc_status: current, didit_status: decision.status };
+    }
+
+    const idv = decision.id_verifications?.[0];
+    const fullName =
+      idv?.full_name || [idv?.first_name, idv?.last_name].filter(Boolean).join(' ') || undefined;
+
+    await this.processWebhook(user.id, mapped, {
+      documentNumber: idv?.document_number,
+      fullName,
+    });
+
+    return { kyc_status: mapped, didit_status: decision.status };
   },
 };

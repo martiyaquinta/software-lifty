@@ -2,20 +2,33 @@ import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { StatusBar, StyleSheet, Text, View } from 'react-native';
-import { getValidated } from '../api/client';
+import { apiClient, getValidated } from '../api/client';
 import { driverStatusSchema } from '../api/types';
 import { Button } from '../components/Button';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
 
 export const UnderReviewScreen: React.FC = () => {
   const navigation = useAppNavigation();
   const hasNavigated = useRef(false);
   const [rejectedMessage, setRejectedMessage] = useState<string | null>(null);
+  const kycSessionId = useAuthStore((s) => s.kycSessionId);
+  const setKycSessionId = useAuthStore((s) => s.setKycSessionId);
 
   const { data, failureCount, refetch } = useQuery({
     queryKey: ['driverStatus'],
     queryFn: async () => {
+      // In dev (no webhooks), refresh the DIDIT decision first so the DB
+      // stays in sync. Production webhooks make this a no-op.
+      if (kycSessionId) {
+        try {
+          await apiClient.get(`/kyc/decision/${kycSessionId}`);
+        } catch {
+          // best-effort; real result comes from webhook or next poll
+        }
+      }
+
       const statusData = await getValidated('/drivers/me/status', driverStatusSchema);
       return statusData;
     },
@@ -27,16 +40,18 @@ export const UnderReviewScreen: React.FC = () => {
     if (!data || hasNavigated.current) return;
     if (data.status === 'approved') {
       hasNavigated.current = true;
+      setKycSessionId(null);
       navigation.replace('Online');
     } else if (data.status === 'rejected') {
       hasNavigated.current = true;
+      setKycSessionId(null);
       setRejectedMessage('Tu cuenta fue rechazada. Por favor revisa tus datos.');
       const timer = setTimeout(() => {
         navigation.replace('OnboardingStep2');
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [data, navigation]);
+  }, [data, navigation, setKycSessionId]);
 
   const showError = failureCount >= 3;
 
