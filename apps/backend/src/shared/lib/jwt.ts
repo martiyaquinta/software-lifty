@@ -1,9 +1,15 @@
 import { createHash } from 'node:crypto';
 import { SignJWT, errors as joseErrors, jwtVerify } from 'jose';
 
-function getSecret(): Uint8Array {
+function getBackendSecret(): Uint8Array {
   const s = process.env.JWT_SECRET;
   if (!s) throw new Error('JWT_SECRET is required');
+  return new TextEncoder().encode(s);
+}
+
+function getSupabaseSecret(): Uint8Array | null {
+  const s = process.env.SUPABASE_JWT_SECRET;
+  if (!s) return null;
   return new TextEncoder().encode(s);
 }
 
@@ -22,7 +28,7 @@ export async function signAccess(payload: TokenPayload): Promise<string> {
     .setSubject(payload.sub)
     .setIssuedAt()
     .setExpirationTime('15m')
-    .sign(getSecret());
+    .sign(getBackendSecret());
 }
 
 export async function signRefresh(userId: string): Promise<string> {
@@ -34,9 +40,9 @@ export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-export async function verifyAccess(token: string): Promise<VerifyResult> {
+async function tryVerify(token: string, secret: Uint8Array): Promise<VerifyResult> {
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    const { payload } = await jwtVerify(token, secret);
     return {
       ok: true,
       payload: { sub: payload.sub as string, role: (payload as any).role ?? 'driver' },
@@ -47,4 +53,13 @@ export async function verifyAccess(token: string): Promise<VerifyResult> {
     }
     return { ok: false, reason: 'invalid' };
   }
+}
+
+export async function verifyAccess(token: string): Promise<VerifyResult> {
+  const supabaseSecret = getSupabaseSecret();
+  if (supabaseSecret) {
+    const result = await tryVerify(token, supabaseSecret);
+    if (result.ok) return result;
+  }
+  return tryVerify(token, getBackendSecret());
 }
