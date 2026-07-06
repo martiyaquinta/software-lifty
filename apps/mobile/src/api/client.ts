@@ -78,7 +78,7 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 // code, dead refresh token) — retrying with a refreshed access token makes
 // no sense. In particular, letting /auth/refresh re-enter the refresh flow
 // deadlocks the queue.
-const NO_REFRESH_PATHS = ['/auth/login', '/auth/register', '/auth/verify', '/auth/refresh'];
+const NO_REFRESH_PATHS = ['/auth/login', '/auth/register', '/auth/verify'];
 
 apiClient.interceptors.response.use(
   (response) => response,

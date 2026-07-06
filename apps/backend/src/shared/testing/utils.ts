@@ -1,7 +1,7 @@
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
-process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
+process.env.SUPABASE_JWT_SECRET = 'test-supabase-jwt-secret-at-least-32-chars!!';
 
 import { SignJWT } from 'jose';
 import { createApp } from '../../index';
@@ -9,7 +9,7 @@ import { getDb, resetDb } from '../db/client';
 import { driverDocuments, drivers, refreshTokens, users, vehicles } from '../db/schema';
 
 export async function createTestToken(userId: string, role = 'driver'): Promise<string> {
-  const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+  const secret = new TextEncoder().encode(process.env.SUPABASE_JWT_SECRET);
   return new SignJWT({ sub: userId, role })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('1h')

@@ -30,7 +30,7 @@ export const authPlugin = new Elysia({ name: 'auth' }).derive(
       };
     }
 
-    const userRow = await db
+    let userRow = await db
       .select({
         id: users.id,
         role: users.role,
@@ -41,6 +41,28 @@ export const authPlugin = new Elysia({ name: 'auth' }).derive(
       .where(eq(users.id, result.payload.sub))
       .limit(1)
       .then((rows) => rows[0] ?? null);
+
+    if (!userRow) {
+      await db.insert(users).values({
+        id: result.payload.sub,
+        role: 'driver',
+        email: null,
+        phone: null,
+        password_hash: 'supabase',
+      });
+
+      userRow = await db
+        .select({
+          id: users.id,
+          role: users.role,
+          email: users.email,
+          phone: users.phone,
+        })
+        .from(users)
+        .where(eq(users.id, result.payload.sub))
+        .limit(1)
+        .then((rows) => rows[0] ?? null);
+    }
 
     if (!userRow) {
       return { user: null, authStatus: 'token_invalid' };
