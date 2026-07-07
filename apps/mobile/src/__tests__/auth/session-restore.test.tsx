@@ -1,79 +1,77 @@
-const mockReplace = jest.fn();
-
-jest.mock('../../hooks/useAppNavigation', () => ({
-  useAppNavigation: () => ({
-    navigate: jest.fn(),
-    replace: mockReplace,
-    goBack: jest.fn(),
-  }),
-}));
-
+const mockRouterReplace = jest.fn();
+let mockNeedsRedirect = false;
 let mockIsAuthenticated = false;
-let mockToken: string | null = null;
-
-jest.mock('../../store/authStore', () => ({
-  useAuthStore: (selector: (state: Record<string, unknown>) => unknown) => {
-    const state = {
-      token: mockToken,
-      refreshToken: null,
-      driverId: null,
-      isAuthenticated: mockIsAuthenticated,
-      needsRedirect: false,
-      phone: null,
-      driverStatus: null,
-      setTokens: jest.fn(),
-      setDriverId: jest.fn(),
-      clearAuth: jest.fn(),
-      resetRedirect: jest.fn(),
-      setPhone: jest.fn(),
-      setDriverStatus: jest.fn(),
-    };
-    return selector(state);
-  },
-}));
-
-jest.mock('../../components/Button', () => ({
-  Button: () => null,
-}));
+let mockSegments: (string | undefined)[] = [''];
+const mockResetRedirect = jest.fn();
 
 jest.mock('expo-router', () => ({
-  useRouter: jest.fn(() => ({
-    push: jest.fn(),
-    back: jest.fn(),
-    replace: jest.fn(),
-  })),
+  useRouter: () => ({ replace: mockRouterReplace, push: jest.fn(), back: jest.fn() }),
+  useSegments: () => mockSegments,
+}));
+
+jest.mock('../../store/authStore', () => ({
+  useAuthStore: (selector: (state: Record<string, unknown>) => unknown) =>
+    selector({
+      needsRedirect: mockNeedsRedirect,
+      isAuthenticated: mockIsAuthenticated,
+      resetRedirect: mockResetRedirect,
+    }),
 }));
 
 import { act, render } from '@testing-library/react-native';
 import React from 'react';
-import { WelcomeScreen } from '../../screens/WelcomeScreen';
+import { InteractionManager } from 'react-native';
+import { AuthRedirectWatcher } from '../../components/AuthRedirectWatcher';
 
-describe('WelcomeScreen auth redirect', () => {
+describe('AuthRedirectWatcher', () => {
   beforeEach(() => {
-    mockReplace.mockClear();
+    mockRouterReplace.mockClear();
+    mockResetRedirect.mockClear();
+    mockNeedsRedirect = false;
     mockIsAuthenticated = false;
-    mockToken = null;
+    mockSegments = [''];
+    // Run scheduled interactions synchronously in tests.
+    jest
+      .spyOn(InteractionManager, 'runAfterInteractions')
+      .mockImplementation((task?: (() => void) | { gen?: () => void }) => {
+        if (typeof task === 'function') task();
+        return { then: jest.fn(), done: jest.fn(), cancel: jest.fn() } as never;
+      });
   });
 
-  test('displays normally when user has no token', async () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('does not redirect when the user is not authenticated', async () => {
     mockIsAuthenticated = false;
-    mockToken = null;
 
     await act(async () => {
-      render(React.createElement(WelcomeScreen));
+      render(React.createElement(AuthRedirectWatcher));
     });
 
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
   });
 
-  test('redirects to Online when isAuthenticated is true', async () => {
+  test('redirects to /online when authenticated on a public route', async () => {
     mockIsAuthenticated = true;
-    mockToken = 'valid-token';
+    mockSegments = [''];
 
     await act(async () => {
-      render(React.createElement(WelcomeScreen));
+      render(React.createElement(AuthRedirectWatcher));
     });
 
-    expect(mockReplace).toHaveBeenCalledWith('Online');
+    expect(mockRouterReplace).toHaveBeenCalledWith('/online');
+  });
+
+  test('does not redirect to /online when authenticated on a private route', async () => {
+    mockIsAuthenticated = true;
+    mockSegments = ['online'];
+
+    await act(async () => {
+      render(React.createElement(AuthRedirectWatcher));
+    });
+
+    expect(mockRouterReplace).not.toHaveBeenCalledWith('/online');
   });
 });
