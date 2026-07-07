@@ -11,6 +11,7 @@ export const toggleOnlineBody = t.Object({
 export const updateProfileBody = t.Object({
   first_name: t.Optional(t.String()),
   last_name: t.Optional(t.String()),
+  phone: t.Optional(t.String()),
   vehicle_plate: t.Optional(t.String()),
   vehicle_brand: t.Optional(t.String()),
   vehicle_model: t.Optional(t.String()),
