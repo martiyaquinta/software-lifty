@@ -12,6 +12,7 @@ const SCREEN_TO_ROUTE: Record<string, string> = {
   OnboardingStep2: '/onboarding-step2',
   UploadDocument: '/upload-document',
   KYCVerify: '/kyc-verify',
+  KYCWebView: '/kyc-webview',
   DNIScan: '/dni-scan',
   Selfie: '/selfie',
   UnderReview: '/under-review',
