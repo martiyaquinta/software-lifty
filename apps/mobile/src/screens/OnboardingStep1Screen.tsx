@@ -294,7 +294,7 @@ export const OnboardingStep1Screen: React.FC = () => {
             placeholder="Patente"
             value={vehiclePlate}
             onChangeText={(t) => {
-              setVehiclePlate(t.toUpperCase());
+              setVehiclePlate(t.toUpperCase().replace(/[^A-Z0-9]/g, ''));
               setError('vehiclePlate', undefined);
             }}
             onBlur={() => setError('vehiclePlate', validatePlate(vehiclePlate))}
