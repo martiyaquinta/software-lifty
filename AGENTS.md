@@ -103,6 +103,6 @@ Quick ref:
 - Theme: `src/theme/index.ts`, usar siempre `theme.colors.*`, etc.
 
 ## Tech Debt
-1. **Backend test script**: `"test": "echo \"Error: no test specified\"` — arreglar para que corra los 194 tests existentes
-2. **Frontend test script**: Jest instalado pero sin script `test` en package.json — agregarlo
+1. ~~**Backend test script**: `"test": "echo \"Error: no test specified\"` — arreglar para que corra los 194 tests existentes~~ ✅ arreglado (`"test": "bun test"`, 206 tests)
+2. ~~**Frontend test script**: Jest instalado pero sin script `test` en package.json — agregarlo~~ ✅ arreglado (PR #28: `"test": "jest"`, 6/6 tests pasando)
 3. **Shared tsconfig**: `tsconfig.base.json` en root para extender en ambos proyectos
