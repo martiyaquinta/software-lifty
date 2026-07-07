@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 
 const SCREEN_TO_ROUTE: Record<string, string> = {
   Welcome: '/',
+  Auth: '/auth',
   Register: '/register',
   LoginPhone: '/login-phone',
   LoginOTP: '/login-otp',

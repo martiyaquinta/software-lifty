@@ -36,7 +36,8 @@
           "mode": "development"
         }
       ],
-      "expo-router"
+      "expo-router",
+      "expo-web-browser"
     ]
   }
 }
