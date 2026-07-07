@@ -33,11 +33,11 @@ async function truncateAll() {
   await db.execute('DELETE FROM refresh_tokens');
   await db.execute('DELETE FROM users');
 
-  // Clear OTP Redis keys to reset rate limits
+  // Clear rate-limit Redis keys so per-IP counters reset between tests
   const redis = getRedis();
   if (redis) {
     try {
-      const keys = await redis.keys('otp:*');
+      const keys = await redis.keys('ratelimit:*');
       if (keys.length > 0) await redis.del(...keys);
     } catch {
       /* best-effort */
