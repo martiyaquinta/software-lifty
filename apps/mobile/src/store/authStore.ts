@@ -6,14 +6,13 @@ type DriverStatusValue = 'pending' | 'approved' | 'under_review' | 'rejected' | 
 
 interface AuthState {
   token: string | null;
-  refreshToken: string | null;
   driverId: string | null;
   isAuthenticated: boolean;
   needsRedirect: boolean;
   phone: string | null;
   driverStatus: DriverStatusValue;
   kycSessionId: string | null;
-  setTokens: (token: string, refreshToken: string) => void;
+  setSession: (token: string | null, userId?: string | null) => void;
   setDriverId: (driverId: string) => void;
   clearAuth: () => void;
   resetRedirect: () => void;
@@ -26,19 +25,22 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       token: null,
-      refreshToken: null,
       driverId: null,
       isAuthenticated: false,
       needsRedirect: false,
       phone: null,
       driverStatus: null,
       kycSessionId: null,
-      setTokens: (token, refreshToken) => set({ token, refreshToken, isAuthenticated: true }),
+      setSession: (token, userId) =>
+        set((state) => ({
+          token,
+          isAuthenticated: !!token,
+          driverId: userId ?? state.driverId,
+        })),
       setDriverId: (driverId) => set({ driverId }),
       clearAuth: () =>
         set({
           token: null,
-          refreshToken: null,
           driverId: null,
           isAuthenticated: false,
           needsRedirect: true,
@@ -56,7 +58,6 @@ export const useAuthStore = create<AuthState>()(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         token: state.token,
-        refreshToken: state.refreshToken,
         driverId: state.driverId,
         isAuthenticated: state.isAuthenticated,
         driverStatus: state.driverStatus,

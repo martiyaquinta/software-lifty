@@ -16,15 +16,21 @@ import {
   setupNotificationHandler,
 } from '../src/lib/notifications';
 import { queryClient } from '../src/lib/queryClient';
+import { supabase } from '../src/lib/supabase';
 import { useAuthStore } from '../src/store/authStore';
 import { theme } from '../src/theme';
 
 function SessionRestore() {
   useEffect(() => {
     const restore = async () => {
-      const token = useAuthStore.getState().token;
-      console.log('[SessionRestore] token present:', !!token);
-      if (!token) return;
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token ?? null;
+      console.log('[SessionRestore] supabase session present:', !!token);
+      if (!token) {
+        useAuthStore.getState().clearAuth();
+        return;
+      }
+      useAuthStore.getState().setSession(token, data.session?.user?.id ?? null);
 
       try {
         const response = await apiClient.get('/auth/me');
