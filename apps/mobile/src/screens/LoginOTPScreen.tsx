@@ -62,7 +62,7 @@ export const LoginOTPScreen: React.FC = () => {
     if (otp.length !== 6 || verifyEmail.isPending || !email) return;
     setStatusError(null);
     try {
-      const verifyResult = await verifyEmail.mutateAsync({ email, token: otp } as any);
+      const verifyResult = await verifyEmail.mutateAsync({ email, code: otp });
       console.log('[LoginOTP] Verify success:', verifyResult);
       try {
         console.log('[LoginOTP] Fetching /drivers/me/status...');

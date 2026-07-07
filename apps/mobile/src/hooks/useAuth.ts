@@ -1,11 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
+import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
 
 export function useSignUp() {
   return useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
-      const { data } = await apiClient.post('/auth/register', { email, password });
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
       return data;
     },
   });
@@ -16,7 +18,12 @@ export function useVerifyEmail() {
 
   return useMutation({
     mutationFn: async ({ email, code }: { email: string; code: string }) => {
-      const { data } = await apiClient.post('/auth/verify', { email, code });
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token: code,
+        type: 'email',
+      });
+      if (error) throw error;
       return data;
     },
     onSuccess: () => {
@@ -28,8 +35,9 @@ export function useVerifyEmail() {
 export function useResendCode() {
   return useMutation({
     mutationFn: async ({ email }: { email: string }) => {
-      const { data } = await apiClient.post('/auth/resend-code', { email });
-      return data as { message: string };
+      const { error } = await supabase.auth.resend({ type: 'signup', email });
+      if (error) throw error;
+      return { message: 'Codigo reenviado' };
     },
   });
 }
@@ -37,8 +45,9 @@ export function useResendCode() {
 export function useForgotPassword() {
   return useMutation({
     mutationFn: async ({ email }: { email: string }) => {
-      const { data } = await apiClient.post('/auth/forgot-password', { email });
-      return data as { message: string };
+      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      if (error) throw error;
+      return { message: 'Codigo enviado' };
     },
   });
 }
@@ -54,44 +63,39 @@ export function useResetPassword() {
       code: string;
       password: string;
     }) => {
-      const { data } = await apiClient.post('/auth/reset-password', { email, code, password });
-      return data as { message: string };
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        email,
+        token: code,
+        type: 'recovery',
+      });
+      if (verifyError) throw verifyError;
+
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (updateError) throw updateError;
+
+      return { message: 'Contrasena actualizada' };
     },
   });
 }
 
 export function useLogin() {
-  const setTokens = useAuthStore((s) => s.setTokens);
-  const setDriverId = useAuthStore((s) => s.setDriverId);
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
-      const { data } = await apiClient.post('/auth/login', { email, password });
-      return data as {
-        access_token: string;
-        refresh_token: string;
-        user: { id: string; email: string; role: string };
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      return {
+        access_token: data.session?.access_token ?? '',
+        user: {
+          id: data.user?.id ?? '',
+          email: data.user?.email ?? '',
+          role: (data.user?.user_metadata?.role as string) ?? 'driver',
+        },
       };
     },
-    onSuccess: (data) => {
-      setTokens(data.access_token, data.refresh_token);
-      setDriverId(data.user.id);
+    onSuccess: () => {
       queryClient.invalidateQueries();
-    },
-  });
-}
-
-export function useRefreshToken() {
-  const setTokens = useAuthStore((s) => s.setTokens);
-
-  return useMutation({
-    mutationFn: async (refreshToken: string) => {
-      const { data } = await apiClient.post('/auth/refresh', { refresh_token: refreshToken });
-      return data as { access_token: string; refresh_token: string };
-    },
-    onSuccess: (data) => {
-      setTokens(data.access_token, data.refresh_token);
     },
   });
 }
@@ -110,6 +114,7 @@ export function useSignOut() {
           /* best-effort */
         }
       }
+      await supabase.auth.signOut();
     },
     onSuccess: () => {
       clearAuth();

@@ -1,6 +1,7 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import Constants from 'expo-constants';
 import type { z } from 'zod';
+import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
 import { ApiError, apiErrorSchema } from './types';
 
@@ -74,11 +75,9 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-// A 401 from these endpoints is a definitive answer (bad credentials, bad
-// code, dead refresh token) — retrying with a refreshed access token makes
-// no sense. In particular, letting /auth/refresh re-enter the refresh flow
-// deadlocks the queue.
-const NO_REFRESH_PATHS = ['/auth/login', '/auth/register', '/auth/verify', '/auth/refresh'];
+// A 401 from these endpoints is a definitive answer (bad credentials, dead
+// session) — retrying with a refreshed access token makes no sense.
+const NO_REFRESH_PATHS = ['/auth/login', '/auth/register', '/auth/verify'];
 
 apiClient.interceptors.response.use(
   (response) => response,
@@ -106,36 +105,20 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = useAuthStore.getState().refreshToken;
-        if (!refreshToken) {
-          throw new Error('No refresh token');
+        const { data, error: refreshError } = await supabase.auth.refreshSession();
+        const newToken = data.session?.access_token ?? null;
+
+        if (refreshError || !newToken) {
+          throw refreshError ?? new Error('Refresh failed');
         }
 
-        let newToken: string | null = null;
-        let newRefreshToken: string | null = null;
-
-        try {
-          const { data } = await apiClient.post('/auth/refresh', {
-            refresh_token: refreshToken,
-          });
-          if (data?.access_token) {
-            newToken = data.access_token;
-            newRefreshToken = data.refresh_token ?? refreshToken;
-          }
-        } catch {
-          // backend refresh failed
-        }
-
-        if (!newToken) {
-          throw new Error('Refresh failed');
-        }
-
-        useAuthStore.getState().setTokens(newToken, newRefreshToken ?? refreshToken);
+        useAuthStore.getState().setSession(newToken, data.session?.user?.id ?? null);
         processQueue(null, newToken);
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return apiClient(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
+        await supabase.auth.signOut();
         useAuthStore.getState().clearAuth();
         return Promise.reject(refreshError);
       } finally {
