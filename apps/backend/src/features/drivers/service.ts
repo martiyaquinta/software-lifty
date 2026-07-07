@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
 import { driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
-import { AppError, NotFoundError } from '../../shared/lib/errors';
+import { AppError, ConflictError, NotFoundError } from '../../shared/lib/errors';
 import { uploadFile } from '../../shared/lib/storage';
 import type { AuthUser } from '../../shared/middleware/auth';
 
@@ -125,6 +125,7 @@ export const driversService = {
     data: {
       first_name?: string;
       last_name?: string;
+      phone?: string;
       vehicle_plate?: string;
       vehicle_brand?: string;
       vehicle_model?: string;
@@ -162,6 +163,19 @@ export const driversService = {
         .update(users)
         .set({ full_name: fullName, updated_at: new Date() })
         .where(eq(users.id, user.id));
+    }
+
+    if (data.phone) {
+      const phone = data.phone.trim();
+      try {
+        await db.update(users).set({ phone, updated_at: new Date() }).where(eq(users.id, user.id));
+      } catch (err) {
+        // users.phone is unique — surface a friendly conflict if taken.
+        if ((err as { code?: string })?.code === '23505') {
+          throw new ConflictError('Ese numero de telefono ya esta registrado');
+        }
+        throw err;
+      }
     }
 
     if (data.photo_url) {

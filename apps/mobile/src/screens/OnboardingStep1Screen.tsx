@@ -4,6 +4,8 @@ import { useState } from 'react';
 import {
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -16,7 +18,6 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Navbar } from '../components/Navbar';
 import { useAppNavigation } from '../hooks/useAppNavigation';
-import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
 import { compressImage } from '../utils/image';
 import { uploadPhotoToBackend } from '../utils/upload';
@@ -36,6 +37,16 @@ interface ValidationErrors {
 const PLATE_REGEX = /^[A-Z]{2,3}[0-9]{3}[A-Z]{0,2}$/;
 const VEHICLE_TYPES: VehicleType[] = ['Auto', 'Moto', 'Camioneta'];
 const CURRENT_YEAR = new Date().getFullYear();
+const MIN_PHONE_DIGITS = 10;
+
+function formatPhone(digits: string): string {
+  if (digits.length === 0) return '';
+  let result = digits[0];
+  if (digits.length > 1) result += ` ${digits.slice(1, Math.min(digits.length, 3))}`;
+  if (digits.length > 3) result += ` ${digits.slice(3, Math.min(digits.length, 7))}`;
+  if (digits.length > 7) result += `-${digits.slice(7, 11)}`;
+  return result;
+}
 
 const validateFirstName = (value: string) => {
   if (!value.trim()) return undefined;
@@ -73,6 +84,7 @@ const validateYear = (value: string) => {
 const isFormValid = (
   firstName: string,
   lastName: string,
+  phoneDigits: string,
   vehiclePlate: string,
   vehicleBrand: string,
   vehicleModel: string,
@@ -85,6 +97,7 @@ const isFormValid = (
     !validateFirstName(firstName) &&
     lastName.trim() !== '' &&
     !validateLastName(lastName) &&
+    phoneDigits.length >= MIN_PHONE_DIGITS &&
     vehiclePlate.trim() !== '' &&
     !validatePlate(vehiclePlate) &&
     vehicleBrand.trim() !== '' &&
@@ -98,10 +111,10 @@ const isFormValid = (
 
 export const OnboardingStep1Screen: React.FC = () => {
   const navigation = useAppNavigation();
-  const phone = useAuthStore((s) => s.phone) ?? '';
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [phoneDigits, setPhoneDigits] = useState('');
   const [vehiclePlate, setVehiclePlate] = useState('');
   const [vehicleBrand, setVehicleBrand] = useState('');
   const [vehicleModel, setVehicleModel] = useState('');
@@ -145,6 +158,7 @@ export const OnboardingStep1Screen: React.FC = () => {
       !isFormValid(
         firstName,
         lastName,
+        phoneDigits,
         vehiclePlate,
         vehicleBrand,
         vehicleModel,
@@ -172,6 +186,7 @@ export const OnboardingStep1Screen: React.FC = () => {
       const payload: Record<string, unknown> = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
+        phone: `+54${phoneDigits}`,
         vehicle_plate: vehiclePlate.trim().toUpperCase(),
         vehicle_brand: vehicleBrand.trim(),
         vehicle_model: vehicleModel.trim(),
@@ -198,167 +213,180 @@ export const OnboardingStep1Screen: React.FC = () => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={theme.colors.deepBlue} />
       <Navbar title="Paso 1/2" onBack={() => navigation.goBack()} />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <TouchableOpacity style={styles.avatarSection} onPress={pickImage} activeOpacity={0.7}>
-          <View style={styles.avatarCircle}>
-            {photoUri ? (
-              <Image source={{ uri: photoUri }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarIcon}>📷</Text>
-            )}
-          </View>
-          <Text style={styles.avatarLabel}>Agregar foto</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.sectionTitle}>PERFIL</Text>
-        <Input
-          placeholder="Nombre"
-          value={firstName}
-          onChangeText={(t) => {
-            setFirstName(t);
-            setError('firstName', undefined);
-          }}
-          onBlur={() => setError('firstName', validateFirstName(firstName))}
-          error={errors.firstName}
-          containerStyle={styles.input}
-          maxLength={100}
-        />
-        <Input
-          placeholder="Apellido"
-          value={lastName}
-          onChangeText={(t) => {
-            setLastName(t);
-            setError('lastName', undefined);
-          }}
-          onBlur={() => setError('lastName', validateLastName(lastName))}
-          error={errors.lastName}
-          containerStyle={styles.input}
-          maxLength={100}
-        />
-        <Input
-          placeholder={phone || '+54 9 XX XXXX-XXXX'}
-          value={phone}
-          editable={false}
-          containerStyle={[styles.input, styles.lockedInput]}
-        />
-
-        <View style={{ height: theme.spacing.md }} />
-
-        <Text style={styles.sectionTitle}>VEHICULO</Text>
-        <View style={styles.vehicleTypes}>
-          {VEHICLE_TYPES.map((type) => (
-            <TouchableOpacity
-              key={type}
-              style={[styles.vehicleType, vehicleType === type && styles.vehicleTypeSelected]}
-              onPress={() => setVehicleType(type)}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.vehicleTypeText,
-                  vehicleType === type && styles.vehicleTypeTextSelected,
-                ]}
-              >
-                {type}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <Input
-          placeholder="Patente"
-          value={vehiclePlate}
-          onChangeText={(t) => {
-            setVehiclePlate(t.toUpperCase());
-            setError('vehiclePlate', undefined);
-          }}
-          onBlur={() => setError('vehiclePlate', validatePlate(vehiclePlate))}
-          error={errors.vehiclePlate}
-          containerStyle={styles.input}
-          autoCapitalize="characters"
-          maxLength={8}
-        />
-        <View style={styles.row}>
-          <Input
-            placeholder="Marca"
-            value={vehicleBrand}
-            onChangeText={(t) => {
-              setVehicleBrand(t);
-              setError('vehicleBrand', undefined);
-            }}
-            onBlur={() => setError('vehicleBrand', validateRequired(vehicleBrand))}
-            error={errors.vehicleBrand}
-            containerStyle={styles.halfInput}
-          />
-          <Input
-            placeholder="Modelo"
-            value={vehicleModel}
-            onChangeText={(t) => {
-              setVehicleModel(t);
-              setError('vehicleModel', undefined);
-            }}
-            onBlur={() => setError('vehicleModel', validateRequired(vehicleModel))}
-            error={errors.vehicleModel}
-            containerStyle={styles.halfInput}
-          />
-        </View>
-        <View style={styles.row}>
-          <Input
-            placeholder="Color"
-            value={vehicleColor}
-            onChangeText={(t) => {
-              setVehicleColor(t);
-              setError('vehicleColor', undefined);
-            }}
-            onBlur={() => setError('vehicleColor', validateRequired(vehicleColor))}
-            error={errors.vehicleColor}
-            containerStyle={styles.halfInput}
-          />
-          <Input
-            placeholder="Año"
-            value={vehicleYear}
-            onChangeText={(t) => {
-              setVehicleYear(t);
-              setError('vehicleYear', undefined);
-            }}
-            onBlur={() => setError('vehicleYear', validateYear(vehicleYear))}
-            error={errors.vehicleYear}
-            containerStyle={styles.halfInput}
-            keyboardType="numeric"
-            maxLength={4}
-          />
-        </View>
-
-        <TouchableOpacity
-          style={styles.checkboxRow}
-          onPress={() => setTermsAccepted(!termsAccepted)}
-          activeOpacity={0.7}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         >
-          <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]} />
-          <Text style={styles.checkboxLabel}>Acepto los terminos y condiciones</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.avatarSection} onPress={pickImage} activeOpacity={0.7}>
+            <View style={styles.avatarCircle}>
+              {photoUri ? (
+                <Image source={{ uri: photoUri }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarIcon}>📷</Text>
+              )}
+            </View>
+            <Text style={styles.avatarLabel}>Agregar foto</Text>
+          </TouchableOpacity>
 
-        {submitError !== '' && <Text style={styles.submitError}>{submitError}</Text>}
+          <Text style={styles.sectionTitle}>PERFIL</Text>
+          <Input
+            placeholder="Nombre"
+            value={firstName}
+            onChangeText={(t) => {
+              setFirstName(t);
+              setError('firstName', undefined);
+            }}
+            onBlur={() => setError('firstName', validateFirstName(firstName))}
+            error={errors.firstName}
+            containerStyle={styles.input}
+            maxLength={100}
+          />
+          <Input
+            placeholder="Apellido"
+            value={lastName}
+            onChangeText={(t) => {
+              setLastName(t);
+              setError('lastName', undefined);
+            }}
+            onBlur={() => setError('lastName', validateLastName(lastName))}
+            error={errors.lastName}
+            containerStyle={styles.input}
+            maxLength={100}
+          />
+          <Input
+            leftElement={<Text style={styles.countryCode}>+54</Text>}
+            placeholder="9 XX XXXX-XXXX"
+            value={formatPhone(phoneDigits)}
+            onChangeText={(t) => setPhoneDigits(t.replace(/\D/g, '').slice(0, 11))}
+            keyboardType="phone-pad"
+            containerStyle={styles.input}
+          />
 
-        <Button
-          title="CONTINUAR"
-          onPress={handleContinue}
-          disabled={
-            !isFormValid(
-              firstName,
-              lastName,
-              vehiclePlate,
-              vehicleBrand,
-              vehicleModel,
-              vehicleColor,
-              vehicleYear,
-              termsAccepted,
-            )
-          }
-          loading={loading}
-          variant="cta"
-          style={styles.button}
-        />
-      </ScrollView>
+          <View style={{ height: theme.spacing.md }} />
+
+          <Text style={styles.sectionTitle}>VEHICULO</Text>
+          <View style={styles.vehicleTypes}>
+            {VEHICLE_TYPES.map((type) => (
+              <TouchableOpacity
+                key={type}
+                style={[styles.vehicleType, vehicleType === type && styles.vehicleTypeSelected]}
+                onPress={() => setVehicleType(type)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.vehicleTypeText,
+                    vehicleType === type && styles.vehicleTypeTextSelected,
+                  ]}
+                >
+                  {type}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Input
+            placeholder="Patente"
+            value={vehiclePlate}
+            onChangeText={(t) => {
+              setVehiclePlate(t.toUpperCase());
+              setError('vehiclePlate', undefined);
+            }}
+            onBlur={() => setError('vehiclePlate', validatePlate(vehiclePlate))}
+            error={errors.vehiclePlate}
+            containerStyle={styles.input}
+            autoCapitalize="characters"
+            maxLength={8}
+          />
+          <View style={styles.row}>
+            <Input
+              placeholder="Marca"
+              value={vehicleBrand}
+              onChangeText={(t) => {
+                setVehicleBrand(t);
+                setError('vehicleBrand', undefined);
+              }}
+              onBlur={() => setError('vehicleBrand', validateRequired(vehicleBrand))}
+              error={errors.vehicleBrand}
+              containerStyle={styles.halfInput}
+            />
+            <Input
+              placeholder="Modelo"
+              value={vehicleModel}
+              onChangeText={(t) => {
+                setVehicleModel(t);
+                setError('vehicleModel', undefined);
+              }}
+              onBlur={() => setError('vehicleModel', validateRequired(vehicleModel))}
+              error={errors.vehicleModel}
+              containerStyle={styles.halfInput}
+            />
+          </View>
+          <View style={styles.row}>
+            <Input
+              placeholder="Color"
+              value={vehicleColor}
+              onChangeText={(t) => {
+                setVehicleColor(t);
+                setError('vehicleColor', undefined);
+              }}
+              onBlur={() => setError('vehicleColor', validateRequired(vehicleColor))}
+              error={errors.vehicleColor}
+              containerStyle={styles.halfInput}
+            />
+            <Input
+              placeholder="Año"
+              value={vehicleYear}
+              onChangeText={(t) => {
+                setVehicleYear(t);
+                setError('vehicleYear', undefined);
+              }}
+              onBlur={() => setError('vehicleYear', validateYear(vehicleYear))}
+              error={errors.vehicleYear}
+              containerStyle={styles.halfInput}
+              keyboardType="numeric"
+              maxLength={4}
+            />
+          </View>
+
+          <TouchableOpacity
+            style={styles.checkboxRow}
+            onPress={() => setTermsAccepted(!termsAccepted)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]} />
+            <Text style={styles.checkboxLabel}>Acepto los terminos y condiciones</Text>
+          </TouchableOpacity>
+
+          {submitError !== '' && <Text style={styles.submitError}>{submitError}</Text>}
+
+          <Button
+            title="CONTINUAR"
+            onPress={handleContinue}
+            disabled={
+              !isFormValid(
+                firstName,
+                lastName,
+                phoneDigits,
+                vehiclePlate,
+                vehicleBrand,
+                vehicleModel,
+                vehicleColor,
+                vehicleYear,
+                termsAccepted,
+              )
+            }
+            loading={loading}
+            variant="cta"
+            style={styles.button}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 };
@@ -368,10 +396,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.white,
   },
+  flex: {
+    flex: 1,
+  },
   content: {
     alignItems: 'center',
     padding: theme.spacing.md,
-    paddingBottom: theme.spacing.lg,
+    paddingBottom: theme.spacing['2xl'],
     gap: theme.spacing.sm,
   },
   avatarSection: {
@@ -413,6 +444,11 @@ const styles = StyleSheet.create({
   },
   lockedInput: {
     opacity: 0.6,
+  },
+  countryCode: {
+    color: theme.colors.deepBlue,
+    fontSize: theme.fontSize.md,
+    fontWeight: theme.fontWeight.medium,
   },
   halfInput: {
     flex: 1,
