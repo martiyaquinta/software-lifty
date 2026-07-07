@@ -19,17 +19,10 @@ export const WelcomeScreen: React.FC = () => {
       <Text style={styles.tagline}>Conduci, gana en serio</Text>
       <View style={styles.spacer} />
       <Button
-        title="CREAR CUENTA"
-        onPress={() => navigation.navigate('Register')}
+        title="COMENZAR"
+        onPress={() => navigation.navigate('Auth')}
         style={styles.button}
         textStyle={styles.buttonText}
-      />
-      <Button
-        title="YA TENGO CUENTA"
-        variant="secondary"
-        onPress={() => navigation.navigate('LoginCredentials')}
-        style={[styles.button, styles.secondaryButton]}
-        textStyle={[styles.buttonText, styles.secondaryButtonText]}
       />
       <View style={styles.spacerSmall} />
       <Text style={styles.terms}>Al continuar aceptas los Terminos y Condiciones</Text>

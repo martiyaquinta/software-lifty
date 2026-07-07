@@ -9,6 +9,7 @@ import { driverStatusSchema } from '../src/api/types';
 import { AuthRedirectWatcher } from '../src/components/AuthRedirectWatcher';
 import { ConnectivityBanner } from '../src/components/feedback/ConnectivityBanner';
 import { ErrorBoundary } from '../src/components/feedback/ErrorBoundary';
+import { AuthProvider } from '../src/context/AuthContext';
 import { useAppNavigation } from '../src/hooks/useAppNavigation';
 import {
   handleNotificationResponse,
@@ -135,21 +136,23 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>
-        <View style={styles.root}>
-          <StatusBar style="auto" />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              animation: 'slide_from_right',
-              contentStyle: { backgroundColor: theme.colors.white },
-            }}
-          />
-          <AuthRedirectWatcher />
-          <SessionRestore />
-          <ActiveTripRecovery />
-          <NotificationSetup />
-          <ConnectivityBanner />
-        </View>
+        <AuthProvider>
+          <View style={styles.root}>
+            <StatusBar style="auto" />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                animation: 'slide_from_right',
+                contentStyle: { backgroundColor: theme.colors.white },
+              }}
+            />
+            <AuthRedirectWatcher />
+            <SessionRestore />
+            <ActiveTripRecovery />
+            <NotificationSetup />
+            <ConnectivityBanner />
+          </View>
+        </AuthProvider>
       </ErrorBoundary>
     </QueryClientProvider>
   );
