@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiClient, getValidated } from '../api/client';
-import { earningsDailySchema } from '../api/types';
+import { driverStatusSchema, earningsDailySchema } from '../api/types';
 import type { EarningsDaily } from '../api/types';
 import { Card } from '../components/Card';
 import { MapView } from '../components/MapView';
@@ -40,9 +40,24 @@ export const OnlineScreen: React.FC = () => {
     refetchInterval: 60_000,
   });
 
+  const { data: driverStatus } = useQuery({
+    queryKey: ['driverStatus'],
+    queryFn: () => getValidated('/drivers/me/status', driverStatusSchema),
+    refetchInterval: 30_000,
+  });
+
+  const documentsPendingReview = driverStatus?.documents_pending_review ?? false;
+
   const handleToggle = useCallback(
     async (newValue: boolean) => {
       setToggleError(null);
+
+      if (newValue && documentsPendingReview) {
+        setToggleError(
+          'Tenes documentos pendientes de revision. No podes conectarte hasta que sean aprobados.',
+        );
+        return;
+      }
 
       try {
         await apiClient.put('/drivers/me/online', { is_online: newValue });
@@ -61,7 +76,7 @@ export const OnlineScreen: React.FC = () => {
         setToggleError(err instanceof Error ? err.message : 'Error al cambiar estado');
       }
     },
-    [setOnline, navigation],
+    [setOnline, navigation, documentsPendingReview],
   );
 
   const handleTabPress = (tab: 'home' | 'earnings' | 'profile') => {
@@ -191,6 +206,14 @@ export const OnlineScreen: React.FC = () => {
             {isOnline ? 'Estas conectado' : 'Estas desconectado'}
           </Text>
           <Toggle value={isOnline} onToggle={handleToggle} />
+          {documentsPendingReview && (
+            <View style={styles.reviewBanner}>
+              <Text style={styles.reviewBannerText}>
+                Documentos pendientes de revision. No podes conectarte hasta tener los papeles en
+                regla.
+              </Text>
+            </View>
+          )}
           {toggleError && <Text style={styles.errorText}>{toggleError}</Text>}
         </View>
 
@@ -272,6 +295,17 @@ const styles = StyleSheet.create({
     color: theme.colors.mediumGray,
   },
   errorText: {
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.dangerRed,
+    textAlign: 'center',
+  },
+  reviewBanner: {
+    backgroundColor: 'rgba(255, 107, 107, 0.12)',
+    borderRadius: theme.radius.sm,
+    padding: theme.spacing.sm,
+    maxWidth: 320,
+  },
+  reviewBannerText: {
     fontSize: theme.fontSize.xs,
     color: theme.colors.dangerRed,
     textAlign: 'center',

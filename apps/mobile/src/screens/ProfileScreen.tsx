@@ -1,4 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
+import { useFocusEffect } from 'expo-router';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -37,6 +38,7 @@ interface ProfileData {
   total_trips: number;
   completion_rate: number;
   is_online: boolean;
+  documents_pending_review?: boolean;
   vehicle: {
     brand: string;
     model: string;
@@ -52,20 +54,42 @@ interface DocumentItem {
   id: string;
   doc_type: string;
   file_url: string;
+  status?: string;
   verified_at: string | null;
   expires_at: string | null;
   created_at: string;
 }
 
-const DOC_LABELS: Record<string, string> = {
-  drivers_license: 'Licencia de conducir',
-  vehicle_registration: 'Cedula del vehiculo',
-  vehicle_insurance: 'Seguro del vehiculo',
-  license: 'Licencia de conducir',
-  registration: 'Cedula del vehiculo',
-  insurance: 'Seguro del vehiculo',
-  background_check: 'Antecedentes',
+// Maps a backend doc_type back to the UploadDocument screen's docType param.
+const DOC_TYPE_TO_UPLOAD: Record<string, string> = {
+  license: 'drivers_license',
+  drivers_license: 'drivers_license',
+  registration: 'vehicle_registration',
+  vehicle_registration: 'vehicle_registration',
+  insurance: 'vehicle_insurance',
+  vehicle_insurance: 'vehicle_insurance',
+  background_check: 'background_check',
 };
+
+// The documents a driver can manage from the profile.
+const MANAGEABLE_DOCS: { docType: string; label: string }[] = [
+  { docType: 'drivers_license', label: 'Licencia de conducir' },
+  { docType: 'vehicle_registration', label: 'Cedula del vehiculo' },
+  { docType: 'vehicle_insurance', label: 'Seguro del vehiculo' },
+];
+
+function docStatusLabel(doc: DocumentItem): string {
+  if (doc.status === 'pending_review') return 'Pendiente de revision';
+  if (doc.status === 'rejected') return 'Rechazado';
+  if (doc.verified_at || doc.status === 'approved') return 'Verificado';
+  return 'Pendiente';
+}
+
+function docStatusIcon(doc: DocumentItem): string {
+  if (doc.status === 'rejected') return '❌';
+  if (doc.verified_at || doc.status === 'approved') return '✅';
+  return '⏳';
+}
 
 function isRealUrl(url: string | null): url is string {
   return !!url && (url.startsWith('http://') || url.startsWith('https://'));
@@ -104,6 +128,12 @@ export const ProfileScreen: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData]),
+  );
 
   const handleTabPress = (tab: 'home' | 'earnings' | 'profile') => {
     setActiveTab(tab);
@@ -245,21 +275,37 @@ export const ProfileScreen: React.FC = () => {
 
         <Card>
           <Text style={styles.sectionTitle}>Documentos</Text>
-          {documents.length === 0 ? (
-            <Text style={styles.emptyText}>No hay documentos cargados</Text>
-          ) : (
-            documents.map((doc) => (
-              <View key={doc.id} style={styles.docRow}>
-                <Text style={styles.docIcon}>{doc.verified_at ? '✅' : '⏳'}</Text>
-                <View style={styles.docInfo}>
-                  <Text style={styles.docName}>{DOC_LABELS[doc.doc_type] ?? doc.doc_type}</Text>
-                  <Text style={styles.docStatus}>
-                    {doc.verified_at ? 'Verificado' : 'Pendiente'}
-                  </Text>
-                </View>
-              </View>
-            ))
+          {profile?.documents_pending_review && (
+            <View style={styles.reviewBanner}>
+              <Text style={styles.reviewBannerText}>
+                Tenes documentos pendientes de revision. No podras conectarte hasta que un
+                administrador los apruebe.
+              </Text>
+            </View>
           )}
+          {MANAGEABLE_DOCS.map((managed) => {
+            const doc = documents.find((d) => DOC_TYPE_TO_UPLOAD[d.doc_type] === managed.docType);
+            return (
+              <View key={managed.docType} style={styles.docRow}>
+                <Text style={styles.docIcon}>{doc ? docStatusIcon(doc) : '➕'}</Text>
+                <View style={styles.docInfo}>
+                  <Text style={styles.docName}>{managed.label}</Text>
+                  <Text style={styles.docStatus}>{doc ? docStatusLabel(doc) : 'No cargado'}</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() =>
+                    navigation.navigate('UploadDocument', {
+                      docType: managed.docType,
+                      docLabel: managed.label,
+                      mode: 'reupload',
+                    })
+                  }
+                >
+                  <Text style={styles.docAction}>{doc ? 'Volver a subir' : 'Subir'}</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
         </Card>
 
         <Button
@@ -452,6 +498,21 @@ const styles = StyleSheet.create({
   docStatus: {
     fontSize: theme.fontSize.xs,
     color: theme.colors.mediumGray,
+  },
+  docAction: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.turquoise,
+    fontWeight: theme.fontWeight.medium,
+  },
+  reviewBanner: {
+    backgroundColor: 'rgba(255, 107, 107, 0.12)',
+    borderRadius: theme.radius.sm,
+    padding: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  reviewBannerText: {
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.dangerRed,
   },
   button: {
     width: 327,

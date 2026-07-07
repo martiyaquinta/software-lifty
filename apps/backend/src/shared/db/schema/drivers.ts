@@ -22,6 +22,7 @@ export const drivers = pgTable('drivers', {
   completion_rate: real('completion_rate').default(0),
   kyc_status: varchar('kyc_status', { length: 30 }).notNull().default('pending'),
   is_online: boolean('is_online').default(false),
+  documents_pending_review: boolean('documents_pending_review').notNull().default(false),
   admin_review_status: varchar('admin_review_status', { length: 30 }).notNull().default('pending'),
   admin_reviewed_by: uuid('admin_reviewed_by').references(() => users.id),
   admin_reviewed_at: timestamp('admin_reviewed_at'),

@@ -1,7 +1,8 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
 import { driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
 import { AppError, ConflictError, NotFoundError } from '../../shared/lib/errors';
+import { logger } from '../../shared/lib/logger';
 import { uploadFile } from '../../shared/lib/storage';
 import type { AuthUser } from '../../shared/middleware/auth';
 
@@ -14,6 +15,20 @@ const VALID_DOC_TYPES = [
   'insurance',
   'background_check',
 ];
+
+// Sensitive documents gate the driver's ability to go online: re-uploading one
+// forces a fresh admin review and pauses "online" until approved. The server —
+// never the client — decides sensitivity, so a driver can't dodge review by
+// mislabelling a doc_type.
+const SENSITIVE_DOC_TYPES = new Set([
+  'drivers_license',
+  'license',
+  'vehicle_registration',
+  'registration',
+  'vehicle_insurance',
+  'insurance',
+  'background_check',
+]);
 
 export const driversService = {
   async getPublicProfile(driverId: string) {
@@ -57,7 +72,11 @@ export const driversService = {
 
   async getMyStatus(user: AuthUser) {
     const [driver] = await db
-      .select({ status: drivers.status, kyc_status: drivers.kyc_status })
+      .select({
+        status: drivers.status,
+        kyc_status: drivers.kyc_status,
+        documents_pending_review: drivers.documents_pending_review,
+      })
       .from(drivers)
       .where(eq(drivers.user_id, user.id))
       .limit(1);
@@ -76,9 +95,15 @@ export const driversService = {
       driver.kyc_status,
     );
 
+    const documentsPendingReview = driver.documents_pending_review;
+
     if (driver.status === 'approved' || driver.status === 'suspended') {
       console.log('[getMyStatus] → returning', driver.status);
-      return { status: driver.status, step: driver.status };
+      return {
+        status: driver.status,
+        step: driver.status,
+        documents_pending_review: documentsPendingReview,
+      };
     }
     if (driver.kyc_status === 'approved') {
       console.log(
@@ -86,28 +111,48 @@ export const driversService = {
         driver.status,
         '→ returning approved',
       );
-      return { status: 'approved', step: 'approved' };
+      return {
+        status: 'approved',
+        step: 'approved',
+        documents_pending_review: documentsPendingReview,
+      };
     }
     if (driver.kyc_status === 'under_review' || driver.kyc_status === 'in_progress') {
       console.log('[getMyStatus] → returning under_review');
-      return { status: 'under_review' };
+      return { status: 'under_review', documents_pending_review: documentsPendingReview };
     }
     if (driver.kyc_status === 'rejected') {
       console.log('[getMyStatus] → returning rejected');
-      return { status: 'rejected' };
+      return { status: 'rejected', documents_pending_review: documentsPendingReview };
     }
     console.log('[getMyStatus] → FALLTHROUGH returning pending, step:', driver.status);
-    return { status: 'pending', step: driver.status };
+    return {
+      status: 'pending',
+      step: driver.status,
+      documents_pending_review: documentsPendingReview,
+    };
   },
 
   async toggleOnline(user: AuthUser, isOnline: boolean) {
     const [driver] = await db
-      .select({ id: drivers.id, is_online: drivers.is_online })
+      .select({
+        id: drivers.id,
+        is_online: drivers.is_online,
+        documents_pending_review: drivers.documents_pending_review,
+      })
       .from(drivers)
       .where(eq(drivers.user_id, user.id))
       .limit(1);
 
     if (!driver) throw new NotFoundError('Onboarding not started');
+
+    if (isOnline && driver.documents_pending_review) {
+      throw new AppError(
+        'No podes conectarte: tenes documentos pendientes de revision.',
+        409,
+        'DOCUMENTS_UNDER_REVIEW',
+      );
+    }
 
     await db
       .update(drivers)
@@ -304,13 +349,97 @@ export const driversService = {
         id: driverDocuments.id,
         doc_type: driverDocuments.doc_type,
         file_url: driverDocuments.file_url,
+        status: driverDocuments.status,
         verified_at: driverDocuments.verified_at,
         expires_at: driverDocuments.expires_at,
         created_at: driverDocuments.created_at,
       })
       .from(driverDocuments)
-      .where(eq(driverDocuments.driver_id, driver.id))
+      .where(
+        and(eq(driverDocuments.driver_id, driver.id), ne(driverDocuments.status, 'superseded')),
+      )
       .orderBy(driverDocuments.created_at);
+  },
+
+  // Re-upload of a document the driver already registered. Each upload is a NEW
+  // row (the previous one is marked `superseded`, never overwritten) so an admin
+  // can always compare before/after. If the doc_type is sensitive, the driver is
+  // pushed back into the admin review queue and forced offline until approved.
+  async reuploadDocument(user: AuthUser, file: File, docType: string) {
+    if (!VALID_DOC_TYPES.includes(docType)) {
+      throw new AppError(`Invalid doc_type: ${docType}`, 400, 'BAD_REQUEST');
+    }
+
+    const [driver] = await db
+      .select({ id: drivers.id, status: drivers.status })
+      .from(drivers)
+      .where(eq(drivers.user_id, user.id))
+      .limit(1);
+
+    if (!driver) throw new NotFoundError('Driver profile not found. Complete onboarding first');
+
+    const path = `${driver.id}/${docType}-${Date.now()}`;
+    const fileUrl = await uploadFile(file, path);
+
+    // Supersede any prior non-superseded doc of the same type.
+    await db
+      .update(driverDocuments)
+      .set({ status: 'superseded', superseded_at: new Date() })
+      .where(
+        and(
+          eq(driverDocuments.driver_id, driver.id),
+          eq(driverDocuments.doc_type, docType),
+          ne(driverDocuments.status, 'superseded'),
+        ),
+      );
+
+    const [doc] = await db
+      .insert(driverDocuments)
+      .values({
+        driver_id: driver.id,
+        doc_type: docType,
+        file_url: fileUrl,
+        status: 'pending_review',
+      })
+      .returning({
+        id: driverDocuments.id,
+        doc_type: driverDocuments.doc_type,
+        file_url: driverDocuments.file_url,
+        status: driverDocuments.status,
+      });
+
+    if (!doc) throw new AppError('Failed to upload document', 400, 'BAD_REQUEST');
+
+    const isSensitive = SENSITIVE_DOC_TYPES.has(docType);
+
+    if (isSensitive) {
+      // Notify admin = put the driver back in the pending review queue
+      // (adminService.listPending filters by status='review'). Force offline
+      // and gate "online" until the change is approved.
+      await db
+        .update(drivers)
+        .set({
+          status: 'review',
+          admin_review_status: 'pending',
+          documents_pending_review: true,
+          is_online: false,
+          updated_at: new Date(),
+        })
+        .where(eq(drivers.id, driver.id));
+
+      logger.info('[DOCS] Sensitive doc re-uploaded, driver back in review', {
+        driverId: driver.id.split('-')[0],
+        docType,
+      });
+    }
+
+    return {
+      id: doc.id,
+      doc_type: doc.doc_type,
+      file_url: doc.file_url,
+      status: doc.status,
+      requires_review: isSensitive,
+    };
   },
 
   async getMyProfile(user: AuthUser) {
@@ -328,6 +457,7 @@ export const driversService = {
         total_trips: drivers.total_trips,
         completion_rate: drivers.completion_rate,
         is_online: drivers.is_online,
+        documents_pending_review: drivers.documents_pending_review,
         created_at: drivers.created_at,
         brand: vehicles.brand,
         model: vehicles.model,
@@ -361,6 +491,7 @@ export const driversService = {
       total_trips: row.total_trips,
       completion_rate: row.completion_rate,
       is_online: row.is_online,
+      documents_pending_review: row.documents_pending_review,
       vehicle: {
         brand: row.brand,
         model: row.model,
