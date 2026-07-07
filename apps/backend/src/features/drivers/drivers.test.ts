@@ -244,3 +244,104 @@ describe('Driver Profile', () => {
     expect(data.vehicle.vehicle_type).toBe('car');
   });
 });
+
+async function reupload(token: string, docType: string) {
+  const formData = new FormData();
+  formData.append('file', new Blob(['content'], { type: 'image/png' }), `${docType}.png`);
+  formData.append('doc_type', docType);
+  const req = new Request('http://localhost/api/drivers/me/documents/reupload', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  const res = await app.handle(req);
+  return { status: res.status, data: await res.json() };
+}
+
+describe('Document re-upload', () => {
+  const phone = '+5492617777777';
+  const password = 'testPass123';
+
+  test('re-uploading a sensitive doc pauses online and flags review', async () => {
+    const { token, driverId } = await fullOnboarding(phone, password);
+    const db = getDb();
+    await db.update(drivers).set({ is_online: true, status: 'approved' }).where(eq(drivers.id, driverId));
+
+    const { status, data } = await reupload(token, 'license');
+    expect(status).toBe(200);
+    expect(data.status).toBe('pending_review');
+    expect(data.requires_review).toBe(true);
+
+    const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId)).limit(1);
+    expect(driver!.documents_pending_review).toBe(true);
+    expect(driver!.is_online).toBe(false);
+    expect(driver!.status).toBe('review');
+    expect(driver!.admin_review_status).toBe('pending');
+  });
+
+  test('cannot go online while documents pending review', async () => {
+    const { token, driverId } = await fullOnboarding(phone, password);
+    await reupload(token, 'license');
+
+    const { status, data } = await request(
+      'PUT',
+      '/api/drivers/me/online',
+      { is_online: true },
+      token,
+    );
+    expect(status).toBe(409);
+    expect(data.error.code).toBe('DOCUMENTS_UNDER_REVIEW');
+  });
+
+  test('re-upload supersedes previous doc of same type', async () => {
+    const { token, driverId } = await fullOnboarding(phone, password);
+    const db = getDb();
+    await db
+      .insert(driverDocuments)
+      .values({ driver_id: driverId, doc_type: 'license', file_url: 'https://x.com/old.png', status: 'approved' });
+
+    await reupload(token, 'license');
+
+    const all = await db.select().from(driverDocuments).where(eq(driverDocuments.driver_id, driverId));
+    const superseded = all.filter((d) => d.status === 'superseded');
+    const pending = all.filter((d) => d.status === 'pending_review');
+    expect(superseded.length).toBe(1);
+    expect(pending.length).toBe(1);
+
+    const { data: listed } = await request('GET', '/api/drivers/me/documents', undefined, token);
+    expect(listed.every((d: { status: string }) => d.status !== 'superseded')).toBe(true);
+  });
+
+  test('admin approval clears pending flag and approves docs', async () => {
+    const { token, driverId } = await fullOnboarding(phone, password);
+    await reupload(token, 'license');
+
+    const db = getDb();
+    const [admin] = await db
+      .insert(users)
+      .values({ phone: '+5492610000001', role: 'admin', password_hash: 'h' })
+      .returning({ id: users.id });
+    const adminToken = await createTestToken(admin.id, 'admin');
+
+    const { status } = await request(
+      'POST',
+      `/api/admin/drivers/${driverId}/review`,
+      { action: 'approve' },
+      adminToken,
+    );
+    expect(status).toBe(200);
+
+    const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId)).limit(1);
+    expect(driver!.documents_pending_review).toBe(false);
+
+    const docs = await db.select().from(driverDocuments).where(eq(driverDocuments.driver_id, driverId));
+    expect(docs.some((d) => d.status === 'approved' && d.verified_at !== null)).toBe(true);
+  });
+
+  test('background_check re-upload also requires review', async () => {
+    const { token } = await fullOnboarding(phone, password);
+    const { status, data } = await reupload(token, 'background_check');
+    expect(status).toBe(200);
+    expect(data.requires_review).toBe(true);
+  });
+});

@@ -54,6 +54,7 @@ export const driverSchema = z.object({
 export const driverStatusSchema = z.object({
   status: z.enum(['pending', 'approved', 'under_review', 'rejected', 'suspended']),
   step: z.enum(['step1', 'step2', 'step3', 'kyc', 'approved']).optional(),
+  documents_pending_review: z.boolean().optional(),
 });
 
 export const tripSchema = z.object({

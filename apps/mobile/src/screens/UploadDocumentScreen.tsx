@@ -17,7 +17,7 @@ import { Button } from '../components/Button';
 import { Navbar } from '../components/Navbar';
 import { theme } from '../theme';
 import { compressImage } from '../utils/image';
-import { uploadDocumentToBackend } from '../utils/upload';
+import { reuploadDocumentToBackend, uploadDocumentToBackend } from '../utils/upload';
 
 type DocType = 'drivers_license' | 'vehicle_registration' | 'vehicle_insurance';
 
@@ -29,11 +29,14 @@ type SelectedFile = {
 };
 
 export const UploadDocumentScreen: React.FC = () => {
-  const { docType, docLabel } = useLocalSearchParams<{
+  const { docType, docLabel, mode } = useLocalSearchParams<{
     docType: DocType;
     docLabel: string;
+    mode?: string;
   }>();
   const router = useRouter();
+
+  const isReupload = mode === 'reupload';
 
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -125,7 +128,22 @@ export const UploadDocumentScreen: React.FC = () => {
         } catch {}
       }
 
-      await uploadDocumentToBackend(uploadUri, uploadName, uploadMimeType, docType);
+      if (isReupload) {
+        const result = await reuploadDocumentToBackend(
+          uploadUri,
+          uploadName,
+          uploadMimeType,
+          docType,
+        );
+        if (result.requires_review) {
+          Alert.alert(
+            'Documento enviado',
+            'Tu documento quedo pendiente de revision. No vas a poder conectarte hasta que un administrador lo apruebe.',
+          );
+        }
+      } else {
+        await uploadDocumentToBackend(uploadUri, uploadName, uploadMimeType, docType);
+      }
       router.back();
     } catch (err) {
       console.error('Upload error:', err);
@@ -143,7 +161,11 @@ export const UploadDocumentScreen: React.FC = () => {
       <Navbar title={title} onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>{title}</Text>
-        <Text style={styles.subtitle}>Subi el documento requerido</Text>
+        <Text style={styles.subtitle}>
+          {isReupload
+            ? 'Al reemplazar este documento, quedara pendiente de revision.'
+            : 'Subi el documento requerido'}
+        </Text>
 
         <View style={styles.preview}>
           {selectedFile ? (

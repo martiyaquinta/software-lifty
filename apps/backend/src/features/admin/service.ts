@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
 import { driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
@@ -58,10 +58,13 @@ export const adminService = {
         id: driverDocuments.id,
         doc_type: driverDocuments.doc_type,
         file_url: driverDocuments.file_url,
+        status: driverDocuments.status,
+        superseded_at: driverDocuments.superseded_at,
         created_at: driverDocuments.created_at,
       })
       .from(driverDocuments)
-      .where(eq(driverDocuments.driver_id, driver.id));
+      .where(eq(driverDocuments.driver_id, driver.id))
+      .orderBy(driverDocuments.created_at);
 
     return {
       ...driver,
@@ -102,9 +105,22 @@ export const adminService = {
         admin_reviewed_by: adminUser.id,
         admin_reviewed_at: new Date(),
         admin_review_notes: notes ?? null,
+        documents_pending_review: false,
         updated_at: new Date(),
       })
       .where(eq(drivers.id, driverId));
+
+    // Resolve the pending documents in line with the admin's decision.
+    await db
+      .update(driverDocuments)
+      .set(
+        action === 'approve'
+          ? { status: 'approved', verified_at: new Date() }
+          : { status: 'rejected' },
+      )
+      .where(
+        and(eq(driverDocuments.driver_id, driverId), eq(driverDocuments.status, 'pending_review')),
+      );
 
     return {
       driver_id: driver.id,

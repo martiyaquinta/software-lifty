@@ -24,6 +24,30 @@ export async function uploadDocumentToBackend(
   return data;
 }
 
+export async function reuploadDocumentToBackend(
+  uri: string,
+  fileName: string,
+  mimeType: string,
+  docType: string,
+): Promise<{
+  id: string;
+  doc_type: string;
+  file_url: string;
+  status: string;
+  requires_review: boolean;
+}> {
+  const formData = new FormData();
+
+  formData.append('file', { uri, type: mimeType, name: fileName } as any);
+  formData.append('doc_type', DOC_TYPE_MAP[docType] ?? docType);
+
+  const { data } = await apiClient.post('/drivers/me/documents/reupload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+  return data;
+}
+
 export async function uploadPhotoToBackend(
   uri: string,
   fileName: string,

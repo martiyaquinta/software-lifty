@@ -2,6 +2,7 @@ import { Elysia } from 'elysia';
 import {
   addDocumentBody,
   driverIdParams,
+  reuploadDocBody,
   toggleOnlineBody,
   updateProfileBody,
   uploadPhotoBody,
@@ -72,6 +73,17 @@ export const driversRoutes = new Elysia({ prefix: '/drivers' })
     }
     return safeCall(() => driversService.listDocuments(user), set);
   })
+  .post(
+    '/me/documents/reupload',
+    ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: 'Unauthorized' };
+      }
+      return safeCall(() => driversService.reuploadDocument(user, body.file, body.doc_type), set);
+    },
+    { body: reuploadDocBody },
+  )
   .post(
     '/me/photo',
     ({ user, body, set }) => {
