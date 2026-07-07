@@ -218,7 +218,7 @@ if (process.env.NODE_ENV !== 'test') {
     logger.info('Shutting down...');
     await app.stop();
     resetDb();
-    closeRedis();
+    await closeRedis();
     process.exit(0);
   });
 
@@ -226,7 +226,7 @@ if (process.env.NODE_ENV !== 'test') {
     logger.info('Shutting down...');
     await app.stop();
     resetDb();
-    closeRedis();
+    await closeRedis();
     process.exit(0);
   });
 }
