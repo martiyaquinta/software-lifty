@@ -201,16 +201,16 @@ export const OnboardingStep2Screen: React.FC = () => {
   }, []);
 
   const handleVerify = useCallback(() => {
-    navigation.navigate('KYCVerify');
+    navigation.replace('UnderReview');
   }, [navigation]);
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={theme.colors.deepBlue} />
-      <Navbar title="Paso 2/2" onBack={() => navigation.goBack()} />
+      <Navbar title="Paso 3/3" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Subi tus documentos</Text>
-        <Text style={styles.subtitle}>Los necesitamos para verificar tu identidad</Text>
+        <Text style={styles.subtitle}>Los necesitamos para habilitar tu cuenta</Text>
 
         {DOCS.map((doc) => {
           const state = docs[doc.type];
@@ -269,7 +269,7 @@ export const OnboardingStep2Screen: React.FC = () => {
         })}
 
         <Button
-          title="VERIFICAR IDENTIDAD"
+          title="ENVIAR DOCUMENTOS"
           onPress={handleVerify}
           style={styles.button}
           disabled={!allUploaded}

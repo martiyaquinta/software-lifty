@@ -19,7 +19,7 @@ export const KYCVerifyScreen: React.FC = () => {
     if (driverStatus === 'approved') {
       navigation.replace('Online');
     } else if (driverStatus === 'under_review') {
-      navigation.navigate('UnderReview');
+      navigation.replace('UnderReview');
     }
   }, [driverStatus]);
 

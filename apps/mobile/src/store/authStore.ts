@@ -11,6 +11,7 @@ interface AuthState {
   needsRedirect: boolean;
   phone: string | null;
   driverStatus: DriverStatusValue;
+  onboardingStep: string | null;
   kycSessionId: string | null;
   setSession: (token: string | null, userId?: string | null) => void;
   setDriverId: (driverId: string) => void;
@@ -18,6 +19,7 @@ interface AuthState {
   resetRedirect: () => void;
   setPhone: (phone: string) => void;
   setDriverStatus: (status: DriverStatusValue) => void;
+  setOnboardingStep: (step: string | null) => void;
   setKycSessionId: (sessionId: string | null) => void;
 }
 
@@ -30,6 +32,7 @@ export const useAuthStore = create<AuthState>()(
       needsRedirect: false,
       phone: null,
       driverStatus: null,
+      onboardingStep: null,
       kycSessionId: null,
       setSession: (token, userId) =>
         set((state) => ({
@@ -46,11 +49,13 @@ export const useAuthStore = create<AuthState>()(
           needsRedirect: true,
           phone: null,
           driverStatus: null,
+          onboardingStep: null,
           kycSessionId: null,
         }),
       resetRedirect: () => set({ needsRedirect: false }),
       setPhone: (phone) => set({ phone }),
       setDriverStatus: (driverStatus) => set({ driverStatus }),
+      setOnboardingStep: (onboardingStep) => set({ onboardingStep }),
       setKycSessionId: (kycSessionId) => set({ kycSessionId }),
     }),
     {
@@ -61,6 +66,7 @@ export const useAuthStore = create<AuthState>()(
         driverId: state.driverId,
         isAuthenticated: state.isAuthenticated,
         driverStatus: state.driverStatus,
+        onboardingStep: state.onboardingStep,
         kycSessionId: state.kycSessionId,
       }),
     },

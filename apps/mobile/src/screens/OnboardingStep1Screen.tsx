@@ -22,21 +22,11 @@ import { theme } from '../theme';
 import { compressImage } from '../utils/image';
 import { uploadPhotoToBackend } from '../utils/upload';
 
-type VehicleType = 'Auto' | 'Moto' | 'Camioneta';
-
 interface ValidationErrors {
   firstName?: string;
   lastName?: string;
-  vehiclePlate?: string;
-  vehicleBrand?: string;
-  vehicleModel?: string;
-  vehicleColor?: string;
-  vehicleYear?: string;
 }
 
-const PLATE_REGEX = /^[A-Z]{2,3}[0-9]{3}[A-Z]{0,2}$/;
-const VEHICLE_TYPES: VehicleType[] = ['Auto', 'Moto', 'Camioneta'];
-const CURRENT_YEAR = new Date().getFullYear();
 const MIN_PHONE_DIGITS = 10;
 
 function formatPhone(digits: string): string {
@@ -48,36 +38,10 @@ function formatPhone(digits: string): string {
   return result;
 }
 
-const validateFirstName = (value: string) => {
+const validateName = (value: string) => {
   if (!value.trim()) return undefined;
   if (value.length > 100) return 'Maximo 100 caracteres';
   if (/\d/.test(value)) return 'No puede contener numeros';
-  return undefined;
-};
-
-const validateLastName = (value: string) => {
-  if (!value.trim()) return undefined;
-  if (value.length > 100) return 'Maximo 100 caracteres';
-  if (/\d/.test(value)) return 'No puede contener numeros';
-  return undefined;
-};
-
-const validatePlate = (value: string) => {
-  if (!value.trim()) return undefined;
-  if (!PLATE_REGEX.test(value.toUpperCase())) return 'Formato invalido (ej: ABC123)';
-  return undefined;
-};
-
-const validateRequired = (value: string) => {
-  if (!value.trim()) return 'Requerido';
-  return undefined;
-};
-
-const validateYear = (value: string) => {
-  if (!value.trim()) return undefined;
-  const num = Number.parseInt(value, 10);
-  if (Number.isNaN(num) || num < 2000 || num > CURRENT_YEAR + 1)
-    return `Ano entre 2000 y ${CURRENT_YEAR + 1}`;
   return undefined;
 };
 
@@ -85,26 +49,14 @@ const isFormValid = (
   firstName: string,
   lastName: string,
   phoneDigits: string,
-  vehiclePlate: string,
-  vehicleBrand: string,
-  vehicleModel: string,
-  vehicleColor: string,
-  vehicleYear: string,
   termsAccepted: boolean,
 ) => {
   return (
     firstName.trim() !== '' &&
-    !validateFirstName(firstName) &&
+    !validateName(firstName) &&
     lastName.trim() !== '' &&
-    !validateLastName(lastName) &&
+    !validateName(lastName) &&
     phoneDigits.length >= MIN_PHONE_DIGITS &&
-    vehiclePlate.trim() !== '' &&
-    !validatePlate(vehiclePlate) &&
-    vehicleBrand.trim() !== '' &&
-    vehicleModel.trim() !== '' &&
-    vehicleColor.trim() !== '' &&
-    vehicleYear.trim() !== '' &&
-    !validateYear(vehicleYear) &&
     termsAccepted
   );
 };
@@ -115,12 +67,6 @@ export const OnboardingStep1Screen: React.FC = () => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phoneDigits, setPhoneDigits] = useState('');
-  const [vehiclePlate, setVehiclePlate] = useState('');
-  const [vehicleBrand, setVehicleBrand] = useState('');
-  const [vehicleModel, setVehicleModel] = useState('');
-  const [vehicleColor, setVehicleColor] = useState('');
-  const [vehicleYear, setVehicleYear] = useState('');
-  const [vehicleType, setVehicleType] = useState<VehicleType>('Auto');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -154,20 +100,7 @@ export const OnboardingStep1Screen: React.FC = () => {
   };
 
   const handleContinue = async () => {
-    if (
-      !isFormValid(
-        firstName,
-        lastName,
-        phoneDigits,
-        vehiclePlate,
-        vehicleBrand,
-        vehicleModel,
-        vehicleColor,
-        vehicleYear,
-        termsAccepted,
-      )
-    )
-      return;
+    if (!isFormValid(firstName, lastName, phoneDigits, termsAccepted)) return;
     setLoading(true);
     setSubmitError('');
 
@@ -187,12 +120,6 @@ export const OnboardingStep1Screen: React.FC = () => {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         phone: `+54${phoneDigits}`,
-        vehicle_plate: vehiclePlate.trim().toUpperCase(),
-        vehicle_brand: vehicleBrand.trim(),
-        vehicle_model: vehicleModel.trim(),
-        vehicle_color: vehicleColor.trim(),
-        vehicle_year: Number.parseInt(vehicleYear, 10),
-        vehicle_type: vehicleType,
       };
 
       if (uploadedPhotoUrl) {
@@ -201,7 +128,8 @@ export const OnboardingStep1Screen: React.FC = () => {
 
       await apiClient.put('/drivers/me', payload);
 
-      navigation.navigate('OnboardingStep2');
+      // Identity verification is required before the vehicle/documents steps.
+      navigation.navigate('KYCVerify');
     } catch (err: any) {
       setSubmitError(err?.message ?? 'Error al guardar los datos');
     } finally {
@@ -212,7 +140,7 @@ export const OnboardingStep1Screen: React.FC = () => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={theme.colors.deepBlue} />
-      <Navbar title="Paso 1/2" onBack={() => navigation.goBack()} />
+      <Navbar title="Paso 1/3" onBack={() => navigation.goBack()} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -242,7 +170,7 @@ export const OnboardingStep1Screen: React.FC = () => {
               setFirstName(t);
               setError('firstName', undefined);
             }}
-            onBlur={() => setError('firstName', validateFirstName(firstName))}
+            onBlur={() => setError('firstName', validateName(firstName))}
             error={errors.firstName}
             containerStyle={styles.input}
             maxLength={100}
@@ -254,7 +182,7 @@ export const OnboardingStep1Screen: React.FC = () => {
               setLastName(t);
               setError('lastName', undefined);
             }}
-            onBlur={() => setError('lastName', validateLastName(lastName))}
+            onBlur={() => setError('lastName', validateName(lastName))}
             error={errors.lastName}
             containerStyle={styles.input}
             maxLength={100}
@@ -267,92 +195,6 @@ export const OnboardingStep1Screen: React.FC = () => {
             keyboardType="phone-pad"
             containerStyle={styles.input}
           />
-
-          <View style={{ height: theme.spacing.md }} />
-
-          <Text style={styles.sectionTitle}>VEHICULO</Text>
-          <View style={styles.vehicleTypes}>
-            {VEHICLE_TYPES.map((type) => (
-              <TouchableOpacity
-                key={type}
-                style={[styles.vehicleType, vehicleType === type && styles.vehicleTypeSelected]}
-                onPress={() => setVehicleType(type)}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[
-                    styles.vehicleTypeText,
-                    vehicleType === type && styles.vehicleTypeTextSelected,
-                  ]}
-                >
-                  {type}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Input
-            placeholder="Patente"
-            value={vehiclePlate}
-            onChangeText={(t) => {
-              setVehiclePlate(t.toUpperCase());
-              setError('vehiclePlate', undefined);
-            }}
-            onBlur={() => setError('vehiclePlate', validatePlate(vehiclePlate))}
-            error={errors.vehiclePlate}
-            containerStyle={styles.input}
-            autoCapitalize="characters"
-            maxLength={8}
-          />
-          <View style={styles.row}>
-            <Input
-              placeholder="Marca"
-              value={vehicleBrand}
-              onChangeText={(t) => {
-                setVehicleBrand(t);
-                setError('vehicleBrand', undefined);
-              }}
-              onBlur={() => setError('vehicleBrand', validateRequired(vehicleBrand))}
-              error={errors.vehicleBrand}
-              containerStyle={styles.halfInput}
-            />
-            <Input
-              placeholder="Modelo"
-              value={vehicleModel}
-              onChangeText={(t) => {
-                setVehicleModel(t);
-                setError('vehicleModel', undefined);
-              }}
-              onBlur={() => setError('vehicleModel', validateRequired(vehicleModel))}
-              error={errors.vehicleModel}
-              containerStyle={styles.halfInput}
-            />
-          </View>
-          <View style={styles.row}>
-            <Input
-              placeholder="Color"
-              value={vehicleColor}
-              onChangeText={(t) => {
-                setVehicleColor(t);
-                setError('vehicleColor', undefined);
-              }}
-              onBlur={() => setError('vehicleColor', validateRequired(vehicleColor))}
-              error={errors.vehicleColor}
-              containerStyle={styles.halfInput}
-            />
-            <Input
-              placeholder="Año"
-              value={vehicleYear}
-              onChangeText={(t) => {
-                setVehicleYear(t);
-                setError('vehicleYear', undefined);
-              }}
-              onBlur={() => setError('vehicleYear', validateYear(vehicleYear))}
-              error={errors.vehicleYear}
-              containerStyle={styles.halfInput}
-              keyboardType="numeric"
-              maxLength={4}
-            />
-          </View>
 
           <TouchableOpacity
             style={styles.checkboxRow}
@@ -368,19 +210,7 @@ export const OnboardingStep1Screen: React.FC = () => {
           <Button
             title="CONTINUAR"
             onPress={handleContinue}
-            disabled={
-              !isFormValid(
-                firstName,
-                lastName,
-                phoneDigits,
-                vehiclePlate,
-                vehicleBrand,
-                vehicleModel,
-                vehicleColor,
-                vehicleYear,
-                termsAccepted,
-              )
-            }
+            disabled={!isFormValid(firstName, lastName, phoneDigits, termsAccepted)}
             loading={loading}
             variant="cta"
             style={styles.button}
@@ -442,48 +272,10 @@ const styles = StyleSheet.create({
   input: {
     width: 343,
   },
-  lockedInput: {
-    opacity: 0.6,
-  },
   countryCode: {
     color: theme.colors.deepBlue,
     fontSize: theme.fontSize.md,
     fontWeight: theme.fontWeight.medium,
-  },
-  halfInput: {
-    flex: 1,
-  },
-  vehicleTypes: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    width: 343,
-  },
-  vehicleType: {
-    flex: 1,
-    height: 44,
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.mediumGray,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.white,
-  },
-  vehicleTypeSelected: {
-    backgroundColor: theme.colors.turquoise,
-    borderColor: theme.colors.turquoise,
-  },
-  vehicleTypeText: {
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.deepBlue,
-  },
-  vehicleTypeTextSelected: {
-    color: theme.colors.white,
-    fontWeight: theme.fontWeight.bold,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    width: 343,
   },
   checkboxRow: {
     flexDirection: 'row',

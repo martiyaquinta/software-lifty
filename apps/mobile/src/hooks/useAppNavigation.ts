@@ -11,6 +11,7 @@ const SCREEN_TO_ROUTE: Record<string, string> = {
   Terms: '/terms',
   OnboardingStep1: '/onboarding-step1',
   OnboardingStep2: '/onboarding-step2',
+  OnboardingVehicle: '/onboarding-vehicle',
   UploadDocument: '/upload-document',
   KYCVerify: '/kyc-verify',
   KYCWebView: '/kyc-webview',

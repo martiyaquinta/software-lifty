@@ -6,6 +6,7 @@ import { apiClient, getValidated } from '../api/client';
 import { driverStatusSchema } from '../api/types';
 import { Button } from '../components/Button';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { STEP_ROUTE } from '../lib/postAuthRouting';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
 
@@ -15,6 +16,8 @@ export const UnderReviewScreen: React.FC = () => {
   const [rejectedMessage, setRejectedMessage] = useState<string | null>(null);
   const kycSessionId = useAuthStore((s) => s.kycSessionId);
   const setKycSessionId = useAuthStore((s) => s.setKycSessionId);
+  const setDriverStatus = useAuthStore((s) => s.setDriverStatus);
+  const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
 
   const { data, failureCount, refetch } = useQuery({
     queryKey: ['driverStatus'],
@@ -38,20 +41,38 @@ export const UnderReviewScreen: React.FC = () => {
 
   useEffect(() => {
     if (!data || hasNavigated.current) return;
+
+    setDriverStatus(data.status);
+    setOnboardingStep(data.step ?? null);
+
     if (data.status === 'approved') {
       hasNavigated.current = true;
       setKycSessionId(null);
       navigation.replace('Online');
-    } else if (data.status === 'rejected') {
+      return;
+    }
+
+    if (data.status === 'rejected') {
       hasNavigated.current = true;
       setKycSessionId(null);
-      setRejectedMessage('Tu cuenta fue rechazada. Por favor revisa tus datos.');
+      setRejectedMessage('Tu verificacion fue rechazada. Por favor intenta nuevamente.');
       const timer = setTimeout(() => {
-        navigation.replace('OnboardingStep2');
-      }, 2000);
+        navigation.replace('KYCVerify');
+      }, 2500);
       return () => clearTimeout(timer);
     }
-  }, [data, navigation, setKycSessionId]);
+
+    // KYC just got approved → the flow continues (vehicle / documents). Advance
+    // the user to whatever step is now pending instead of leaving them waiting.
+    if (data.step && data.step !== 'review' && data.step !== 'kyc') {
+      const route = STEP_ROUTE[data.step];
+      if (route?.screen) {
+        hasNavigated.current = true;
+        setKycSessionId(null);
+        navigation.replace(route.screen);
+      }
+    }
+  }, [data, navigation, setKycSessionId, setDriverStatus, setOnboardingStep]);
 
   const showError = failureCount >= 3;
 

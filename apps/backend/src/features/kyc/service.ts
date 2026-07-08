@@ -139,8 +139,20 @@ export const kycService = {
       updated_at: new Date(),
     };
 
+    // KYC approval only verifies identity — it does NOT approve the driver.
+    // The driver still has to complete the vehicle + documents steps and pass
+    // admin review before `drivers.status` becomes 'approved'. We only advance
+    // the onboarding status out of the KYC gate so the app routes to the
+    // vehicle step next.
     if (status === 'approved') {
-      driverUpdateData.status = 'approved';
+      const [drv] = await db
+        .select({ status: drivers.status })
+        .from(drivers)
+        .where(eq(drivers.user_id, userId))
+        .limit(1);
+      if (drv && (drv.status === 'step1' || drv.status === 'kyc' || drv.status === 'kyc_pending')) {
+        driverUpdateData.status = 'kyc_approved';
+      }
     }
 
     const [driver] = await db

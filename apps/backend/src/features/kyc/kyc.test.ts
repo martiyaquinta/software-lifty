@@ -184,7 +184,9 @@ describe('KYC', () => {
 
     const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId)).limit(1);
     expect(driver!.kyc_status).toBe('approved');
-    expect(driver!.status).toBe('approved');
+    // KYC approval verifies identity but must NOT approve the driver: they still
+    // owe the vehicle + documents steps and admin review.
+    expect(driver!.status).toBe('kyc_approved');
   });
 
   test('POST /webhook with invalid HMAC returns error', async () => {

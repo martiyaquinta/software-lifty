@@ -8,23 +8,11 @@ import { Button } from '../components/Button';
 import { OTPInput } from '../components/OTPInput';
 import { useAppNavigation } from '../hooks/useAppNavigation';
 import { useVerifyEmail } from '../hooks/useAuth';
+import { routeForDriverStatus } from '../lib/postAuthRouting';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
 
 const COOLDOWN_SECONDS = 30;
-
-type DriverStatusValue = DriverStatus['status'] | null;
-
-const STATUS_ROUTE: Record<string, { screen: string; storeStatus: DriverStatusValue }> = {
-  'pending:step1': { screen: 'Terms', storeStatus: 'pending' },
-  'pending:step2': { screen: 'OnboardingStep1', storeStatus: 'pending' },
-  'pending:step3': { screen: 'OnboardingStep2', storeStatus: 'pending' },
-  pending: { screen: 'Terms', storeStatus: 'pending' },
-  under_review: { screen: 'UnderReview', storeStatus: 'under_review' },
-  approved: { screen: 'Online', storeStatus: 'approved' },
-  rejected: { screen: '', storeStatus: 'rejected' },
-  suspended: { screen: '', storeStatus: 'suspended' },
-};
 
 export const LoginOTPScreen: React.FC = () => {
   const navigation = useAppNavigation();
@@ -62,50 +50,22 @@ export const LoginOTPScreen: React.FC = () => {
     if (otp.length !== 6 || verifyEmail.isPending || !email) return;
     setStatusError(null);
     try {
-      const verifyResult = await verifyEmail.mutateAsync({ email, code: otp });
-      console.log('[LoginOTP] Verify success:', verifyResult);
+      await verifyEmail.mutateAsync({ email, code: otp });
       try {
-        console.log('[LoginOTP] Fetching /drivers/me/status...');
         const { data: body } = await apiClient.get('/drivers/me/status');
-        console.log('[LoginOTP] /drivers/me/status response:', JSON.stringify(body));
         const payload = body?.data ?? body;
         const parsed = driverStatusSchema.safeParse(payload);
         const driverData = parsed.success ? parsed.data : (payload as DriverStatus);
-        const status = driverData.status;
-        const step = driverData.step;
-        console.log(
-          '[LoginOTP] driverStatus:',
-          status,
-          '| step:',
-          step,
-          '| parsed success:',
-          parsed.success,
-        );
 
-        if (
-          status &&
-          ['pending', 'approved', 'under_review', 'rejected', 'suspended'].includes(status)
-        ) {
-          setDriverStatus(
-            status as 'pending' | 'approved' | 'under_review' | 'rejected' | 'suspended',
-          );
+        const route = routeForDriverStatus(driverData);
+        if (route.status) {
+          setDriverStatus(route.status);
         }
 
-        if (status === 'rejected') {
-          console.log('[LoginOTP] → rejected, showing error');
-          setStatusError('Tu cuenta ha sido rechazada. Contacta a soporte.');
+        if (route.blockedMessage) {
+          setStatusError(route.blockedMessage);
           return;
         }
-        if (status === 'suspended') {
-          console.log('[LoginOTP] → suspended, showing error');
-          setStatusError('Tu cuenta ha sido suspendida.');
-          return;
-        }
-
-        const key = step ? `${status}:${step}` : status;
-        const route = STATUS_ROUTE[key] ?? STATUS_ROUTE.approved;
-        console.log('[LoginOTP] route key:', key, '→ screen:', route.screen);
-
         if (route.screen) {
           navigation.navigate(route.screen);
         }

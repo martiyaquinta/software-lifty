@@ -16,21 +16,9 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { useAppNavigation } from '../hooks/useAppNavigation';
 import { useLogin } from '../hooks/useAuth';
+import { routeForDriverStatus } from '../lib/postAuthRouting';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
-
-type DriverStatusValue = DriverStatus['status'] | null;
-
-const STATUS_ROUTE: Record<string, { screen: string; storeStatus: DriverStatusValue }> = {
-  'pending:step1': { screen: 'Terms', storeStatus: 'pending' },
-  'pending:step2': { screen: 'OnboardingStep1', storeStatus: 'pending' },
-  'pending:step3': { screen: 'OnboardingStep2', storeStatus: 'pending' },
-  pending: { screen: 'Terms', storeStatus: 'pending' },
-  under_review: { screen: 'UnderReview', storeStatus: 'under_review' },
-  approved: { screen: 'Online', storeStatus: 'approved' },
-  rejected: { screen: '', storeStatus: 'rejected' },
-  suspended: { screen: '', storeStatus: 'suspended' },
-};
 
 export const LoginCredentialsScreen: React.FC = () => {
   const navigation = useAppNavigation();
@@ -54,31 +42,18 @@ export const LoginCredentialsScreen: React.FC = () => {
     }
 
     try {
-      console.log('[LoginCredentials] Fetching /drivers/me/status...');
       const { data: body } = await apiClient.get('/drivers/me/status');
-      console.log('[LoginCredentials] /drivers/me/status response:', JSON.stringify(body));
       const payload = body?.data ?? body;
       const parsed = driverStatusSchema.safeParse(payload);
       const driverData = parsed.success ? parsed.data : (payload as DriverStatus);
-      const status = driverData.status;
-      const step = driverData.step;
-      console.log(
-        '[LoginCredentials] driverStatus:',
-        status,
-        '| step:',
-        step,
-        '| parsed success:',
-        parsed.success,
-        '| payload:',
-        JSON.stringify(payload),
-      );
 
-      const key = step ? `${status}:${step}` : status;
-      const route = STATUS_ROUTE[key] ?? STATUS_ROUTE.approved;
+      const route = routeForDriverStatus(driverData);
+      setDriverStatus(route.status);
 
-      console.log('[LoginCredentials] route key:', key, '→ screen:', route.screen);
-      setDriverStatus(route.storeStatus);
-
+      if (route.blockedMessage) {
+        setError(route.blockedMessage);
+        return;
+      }
       if (route.screen) {
         navigation.navigate(route.screen);
       }
