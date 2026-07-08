@@ -26,7 +26,6 @@ function SessionRestore() {
     const restore = async () => {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token ?? null;
-      console.log('[SessionRestore] supabase session present:', !!token);
       if (!token) {
         useAuthStore.getState().clearAuth();
         return;
@@ -37,23 +36,18 @@ function SessionRestore() {
         const response = await apiClient.get('/auth/me');
         const user = response.data;
         if (user?.id) {
-          console.log('[SessionRestore] auth/me returned user:', user.id);
           useAuthStore.getState().setDriverId(user.id);
         }
 
         try {
-          console.log('[SessionRestore] Fetching /drivers/me/status...');
           const statusRes = await apiClient.get('/drivers/me/status');
-          console.log(
-            '[SessionRestore] /drivers/me/status response:',
-            JSON.stringify(statusRes.data),
-          );
           const parsed = driverStatusSchema.safeParse(statusRes.data?.data ?? statusRes.data);
           if (parsed.success) {
-            console.log('[SessionRestore] setting driverStatus:', parsed.data.status);
             useAuthStore.getState().setDriverStatus(parsed.data.status);
-          } else {
-            console.log('[SessionRestore] parse failed, could not set driverStatus');
+            // Persist the onboarding step so AuthRedirectWatcher can route a
+            // returning user to exactly where they left off (e.g. the KYC gate)
+            // instead of dropping them on the app home.
+            useAuthStore.getState().setOnboardingStep(parsed.data.step ?? null);
           }
         } catch (statusErr: any) {
           console.log('[SessionRestore] /drivers/me/status ERROR:', statusErr?.message);

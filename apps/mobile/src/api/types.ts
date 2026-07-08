@@ -53,7 +53,21 @@ export const driverSchema = z.object({
 
 export const driverStatusSchema = z.object({
   status: z.enum(['pending', 'approved', 'under_review', 'rejected', 'suspended']),
-  step: z.enum(['step1', 'step2', 'step3', 'kyc', 'approved']).optional(),
+  step: z
+    .enum([
+      'profile',
+      'kyc',
+      'vehicle',
+      'documents',
+      'review',
+      'approved',
+      // legacy values kept so older backend responses still parse
+      'step1',
+      'step2',
+      'step3',
+    ])
+    .optional(),
+  kyc_status: z.string().optional(),
   documents_pending_review: z.boolean().optional(),
 });
 

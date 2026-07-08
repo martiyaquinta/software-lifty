@@ -30,6 +30,9 @@ const SENSITIVE_DOC_TYPES = new Set([
   'background_check',
 ]);
 
+// Documents required to finish onboarding (licencia, cedula, seguro).
+const REQUIRED_DOCUMENT_COUNT = 3;
+
 export const driversService = {
   async getPublicProfile(driverId: string) {
     const rows = await db
@@ -70,65 +73,87 @@ export const driversService = {
     };
   },
 
+  // Single source of truth for "where is this driver in onboarding". The mobile
+  // app routes purely off `step`, and the flow is KYC-gated: a driver cannot
+  // reach `vehicle`/`documents` until `kyc_status === 'approved'`. Returned
+  // steps: profile → kyc → vehicle → documents → review → approved.
   async getMyStatus(user: AuthUser) {
     const [driver] = await db
       .select({
+        id: drivers.id,
         status: drivers.status,
         kyc_status: drivers.kyc_status,
+        admin_review_status: drivers.admin_review_status,
         documents_pending_review: drivers.documents_pending_review,
       })
       .from(drivers)
       .where(eq(drivers.user_id, user.id))
       .limit(1);
 
+    // No driver row yet → user must complete their profile (step1).
     if (!driver) {
-      console.log('[getMyStatus] userId:', user.id, '→ driver row NOT FOUND → returning pending');
-      return { status: 'pending' };
+      return { status: 'pending', step: 'profile', kyc_status: 'pending' };
     }
-
-    console.log(
-      '[getMyStatus] userId:',
-      user.id,
-      '| status:',
-      driver.status,
-      '| kyc_status:',
-      driver.kyc_status,
-    );
 
     const documentsPendingReview = driver.documents_pending_review;
 
-    if (driver.status === 'approved' || driver.status === 'suspended') {
-      console.log('[getMyStatus] → returning', driver.status);
+    // Terminal admin states.
+    if (driver.status === 'suspended') {
       return {
-        status: driver.status,
-        step: driver.status,
+        status: 'suspended',
+        step: 'approved',
         documents_pending_review: documentsPendingReview,
       };
     }
-    if (driver.kyc_status === 'approved') {
-      console.log(
-        '[getMyStatus] → kyc_status approved but status is',
-        driver.status,
-        '→ returning approved',
-      );
+    if (driver.status === 'approved') {
       return {
         status: 'approved',
         step: 'approved',
         documents_pending_review: documentsPendingReview,
       };
     }
-    if (driver.kyc_status === 'under_review' || driver.kyc_status === 'in_progress') {
-      console.log('[getMyStatus] → returning under_review');
-      return { status: 'under_review', documents_pending_review: documentsPendingReview };
+    if (driver.status === 'rejected' || driver.admin_review_status === 'rejected') {
+      return { status: 'rejected', step: 'review', kyc_status: driver.kyc_status };
     }
-    if (driver.kyc_status === 'rejected') {
-      console.log('[getMyStatus] → returning rejected');
-      return { status: 'rejected', documents_pending_review: documentsPendingReview };
+
+    // KYC gate: identity must be verified before anything else.
+    if (driver.kyc_status !== 'approved') {
+      // DIDIT is still processing → keep the user on the waiting screen.
+      if (driver.kyc_status === 'in_progress' || driver.kyc_status === 'under_review') {
+        return { status: 'under_review', step: 'kyc', kyc_status: driver.kyc_status };
+      }
+      // pending / rejected / expired → user must (re)start verification.
+      return { status: 'pending', step: 'kyc', kyc_status: driver.kyc_status };
     }
-    console.log('[getMyStatus] → FALLTHROUGH returning pending, step:', driver.status);
+
+    // KYC approved — vehicle required next.
+    const [vehicle] = await db
+      .select({ id: vehicles.id })
+      .from(vehicles)
+      .where(eq(vehicles.driver_id, driver.id))
+      .limit(1);
+
+    if (!vehicle) {
+      return { status: 'pending', step: 'vehicle', kyc_status: 'approved' };
+    }
+
+    // Vehicle done — documents required next.
+    const docsList = await db
+      .select({ id: driverDocuments.id })
+      .from(driverDocuments)
+      .where(
+        and(eq(driverDocuments.driver_id, driver.id), ne(driverDocuments.status, 'superseded')),
+      );
+
+    if (docsList.length < REQUIRED_DOCUMENT_COUNT) {
+      return { status: 'pending', step: 'documents', kyc_status: 'approved' };
+    }
+
+    // Everything submitted — awaiting admin review.
     return {
-      status: 'pending',
-      step: driver.status,
+      status: 'under_review',
+      step: 'review',
+      kyc_status: 'approved',
       documents_pending_review: documentsPendingReview,
     };
   },
@@ -181,25 +206,24 @@ export const driversService = {
     },
   ) {
     const [existing] = await db
-      .select({ id: drivers.id, status: drivers.status })
+      .select({ id: drivers.id, status: drivers.status, kyc_status: drivers.kyc_status })
       .from(drivers)
       .where(eq(drivers.user_id, user.id))
       .limit(1);
 
     let driverId: string;
-    let currentStatus = existing?.status ?? 'step1';
+    const kycStatus = existing?.kyc_status ?? 'pending';
 
     if (existing) {
       driverId = existing.id;
     } else {
       const [newDriver] = await db
         .insert(drivers)
-        .values({ user_id: user.id, status: 'step2' })
+        .values({ user_id: user.id, status: 'step1' })
         .returning({ id: drivers.id });
 
       if (!newDriver) throw new AppError('Failed to create driver profile', 500, 'INTERNAL_ERROR');
       driverId = newDriver.id;
-      currentStatus = 'step2';
     }
 
     if (data.first_name || data.last_name) {
@@ -230,20 +254,23 @@ export const driversService = {
         .where(eq(users.id, user.id));
     }
 
-    if (currentStatus === 'step1' || currentStatus === 'step2') {
-      await db
-        .update(drivers)
-        .set({ status: 'step2', updated_at: new Date() })
-        .where(eq(drivers.id, driverId));
-      currentStatus = 'step2';
-    }
-
     const hasVehicleData =
       data.vehicle_brand ||
       data.vehicle_model ||
       data.vehicle_color ||
       data.vehicle_plate ||
       data.vehicle_year;
+
+    // KYC gate: no vehicle can be registered until the driver's identity is
+    // verified. This is what forces every driver through DIDIT — the client
+    // cannot skip it by calling this endpoint directly.
+    if (hasVehicleData && kycStatus !== 'approved') {
+      throw new AppError(
+        'Debes completar la verificacion de identidad (KYC) antes de cargar el vehiculo',
+        400,
+        'KYC_REQUIRED',
+      );
+    }
 
     if (hasVehicleData) {
       const [existingVehicle] = await db
@@ -269,15 +296,8 @@ export const driversService = {
       }
     }
 
-    if (hasVehicleData && (currentStatus === 'step2' || currentStatus === 'step3')) {
-      await db
-        .update(drivers)
-        .set({ status: 'step3', updated_at: new Date() })
-        .where(eq(drivers.id, driverId));
-      currentStatus = 'step3';
-    }
-
-    return { id: driverId, status: currentStatus, message: 'Profile updated' };
+    const result = await this.getMyStatus(user);
+    return { id: driverId, status: result.status, step: result.step, message: 'Profile updated' };
   },
 
   async addDocument(
@@ -289,12 +309,21 @@ export const driversService = {
     }
 
     const [driver] = await db
-      .select({ id: drivers.id, status: drivers.status })
+      .select({ id: drivers.id, status: drivers.status, kyc_status: drivers.kyc_status })
       .from(drivers)
       .where(eq(drivers.user_id, user.id))
       .limit(1);
 
     if (!driver) throw new NotFoundError('Driver profile not found. Complete step 1 first');
+
+    // KYC gate: documents can only be uploaded after identity verification.
+    if (driver.kyc_status !== 'approved') {
+      throw new AppError(
+        'Debes completar la verificacion de identidad (KYC) antes de subir documentos',
+        400,
+        'KYC_REQUIRED',
+      );
+    }
 
     await db.insert(driverDocuments).values({
       driver_id: driver.id,
@@ -305,16 +334,21 @@ export const driversService = {
     const docsList = await db
       .select({ id: driverDocuments.id })
       .from(driverDocuments)
-      .where(eq(driverDocuments.driver_id, driver.id));
+      .where(
+        and(eq(driverDocuments.driver_id, driver.id), ne(driverDocuments.status, 'superseded')),
+      );
 
-    if (docsList.length >= 3 && driver.status === 'step3') {
+    // All required docs submitted → hand the driver to the admin review queue
+    // (adminService.listPending filters by status = 'review').
+    if (docsList.length >= REQUIRED_DOCUMENT_COUNT && driver.status !== 'approved') {
       await db
         .update(drivers)
-        .set({ status: 'kyc', kyc_status: 'in_progress', updated_at: new Date() })
+        .set({ status: 'review', admin_review_status: 'pending', updated_at: new Date() })
         .where(eq(drivers.id, driver.id));
     }
 
-    return { message: 'Document uploaded', status: driver.status };
+    const result = await this.getMyStatus(user);
+    return { message: 'Document uploaded', status: result.status, step: result.step };
   },
 
   async uploadPhoto(user: AuthUser, file: File) {
