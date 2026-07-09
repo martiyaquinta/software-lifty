@@ -35,9 +35,13 @@ export async function registerForPush(): Promise<string | null> {
       });
     }
 
-    const token = await Notifications.getExpoPushTokenAsync({
-      projectId: Constants.expoConfig?.extra?.eas?.projectId ?? Constants.expoConfig?.slug,
-    });
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    if (!projectId) {
+      console.warn('registerForPush skipped: no EAS projectId configured');
+      return null;
+    }
+
+    const token = await Notifications.getExpoPushTokenAsync({ projectId });
     return token.data;
   } catch (error) {
     console.error('registerForPush failed:', error);

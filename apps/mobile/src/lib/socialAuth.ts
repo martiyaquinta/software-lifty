@@ -57,6 +57,7 @@ async function createSessionFromUrl(url: string) {
  * Returns the session on success, or `null` if the user dismissed the browser.
  */
 export async function signInWithProvider(provider: SocialProvider) {
+  console.log('[OAuth] redirectUri:', authRedirectUri);
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
