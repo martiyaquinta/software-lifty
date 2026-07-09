@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
@@ -18,6 +18,7 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Navbar } from '../components/Navbar';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { supabase } from '../lib/supabase';
 import { theme } from '../theme';
 import { compressImage } from '../utils/image';
 import { uploadPhotoToBackend } from '../utils/upload';
@@ -77,6 +78,31 @@ export const OnboardingStep1Screen: React.FC = () => {
     setErrors((prev) => ({ ...prev, [field]: error }));
   };
 
+  // Prefill from the OAuth identity (Google gives name/last name/avatar). Phone
+  // is never provided by the provider, so it stays manual. Only fills empty
+  // fields so it never clobbers what the user is typing.
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const meta = (data.user?.user_metadata ?? {}) as Record<string, unknown>;
+      const str = (v: unknown) => (typeof v === 'string' ? v : '');
+
+      let fn = str(meta.given_name);
+      let ln = str(meta.family_name);
+      const full = str(meta.full_name) || str(meta.name);
+      if (!fn && full) {
+        const parts = full.trim().split(/\s+/);
+        fn = parts[0] ?? '';
+        ln = parts.slice(1).join(' ');
+      }
+
+      if (fn) setFirstName((prev) => prev || fn);
+      if (ln) setLastName((prev) => prev || ln);
+
+      const avatar = str(meta.avatar_url) || str(meta.picture);
+      if (avatar) setPhotoUri((prev) => prev ?? avatar);
+    });
+  }, []);
+
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -108,11 +134,16 @@ export const OnboardingStep1Screen: React.FC = () => {
       let uploadedPhotoUrl: string | null = null;
 
       if (photoUri) {
-        try {
-          const result = await uploadPhotoToBackend(photoUri, 'avatar.jpg', 'image/jpeg');
-          uploadedPhotoUrl = result.file_url;
-        } catch (err) {
-          console.error('Photo upload error:', err);
+        if (/^https?:\/\//.test(photoUri)) {
+          // Google avatar — already a hosted URL, no upload needed.
+          uploadedPhotoUrl = photoUri;
+        } else {
+          try {
+            const result = await uploadPhotoToBackend(photoUri, 'avatar.jpg', 'image/jpeg');
+            uploadedPhotoUrl = result.file_url;
+          } catch (err) {
+            console.error('Photo upload error:', err);
+          }
         }
       }
 
