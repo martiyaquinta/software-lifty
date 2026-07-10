@@ -171,14 +171,20 @@ export const authService = {
     }
 
     if (user.verification_attempts >= MAX_CODE_ATTEMPTS) {
+      logger.warn('[AUTH] Email verification — account locked (too many attempts)', {
+        userId: user.id.split('-')[0],
+        attempts: user.verification_attempts,
+      });
       throw new BadRequestError('Demasiados intentos. Solicita un nuevo codigo.');
     }
 
     if (user.verification_code !== code) {
-      await db
-        .update(users)
-        .set({ verification_attempts: user.verification_attempts + 1 })
-        .where(eq(users.id, user.id));
+      const attempts = user.verification_attempts + 1;
+      await db.update(users).set({ verification_attempts: attempts }).where(eq(users.id, user.id));
+      logger.warn('[AUTH] Email verification — invalid code', {
+        userId: user.id.split('-')[0],
+        attempts,
+      });
       throw new BadRequestError('Codigo de verificacion invalido');
     }
 
@@ -310,14 +316,20 @@ export const authService = {
     }
 
     if (user.reset_attempts >= MAX_CODE_ATTEMPTS) {
+      logger.warn('[AUTH] Password reset — account locked (too many attempts)', {
+        userId: user.id.split('-')[0],
+        attempts: user.reset_attempts,
+      });
       throw new BadRequestError('Demasiados intentos. Solicita un nuevo codigo.');
     }
 
     if (user.reset_code !== code) {
-      await db
-        .update(users)
-        .set({ reset_attempts: user.reset_attempts + 1 })
-        .where(eq(users.id, user.id));
+      const attempts = user.reset_attempts + 1;
+      await db.update(users).set({ reset_attempts: attempts }).where(eq(users.id, user.id));
+      logger.warn('[AUTH] Password reset — invalid code', {
+        userId: user.id.split('-')[0],
+        attempts,
+      });
       throw invalidError;
     }
 
