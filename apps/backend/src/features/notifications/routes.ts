@@ -1,28 +1,22 @@
 import { Elysia } from 'elysia';
+import { authGuard } from '../../shared/middleware/require-auth';
 import { registerTokenBody } from './schema';
 import { notificationsService } from './service';
 
 import { safeCall } from '../../shared/lib/route-utils';
 
 export const notificationsRoutes = new Elysia({ prefix: '/notifications' })
+  .use(authGuard)
   .post(
     '/token',
-    ({ user, body, set }) => {
-      if (!user) {
-        set.status = 401;
-        return { error: 'Unauthorized' };
-      }
-      return safeCall(
-        () => notificationsService.registerToken(user, body.token, body.platform),
-        set,
-      );
-    },
-    { body: registerTokenBody },
+    ({ user, body, set }) =>
+      safeCall(() => notificationsService.registerToken(user, body.token, body.platform), set),
+    { body: registerTokenBody, requireAuth: true },
   )
-  .delete('/token', ({ user, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { error: 'Unauthorized' };
-    }
-    return safeCall(() => notificationsService.removeToken(user), set);
-  });
+  .delete(
+    '/token',
+    ({ user, set }) => safeCall(() => notificationsService.removeToken(user), set),
+    {
+      requireAuth: true,
+    },
+  );

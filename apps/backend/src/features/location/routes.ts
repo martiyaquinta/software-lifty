@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia';
 import { verifyAccess } from '../../shared/lib/jwt';
 import { safeCall } from '../../shared/lib/route-utils';
+import { authGuard } from '../../shared/middleware/require-auth';
 import { locationUpdateBody } from './schema';
 import { getDriverIdByUserId, upsertLocation } from './service';
 
@@ -66,18 +67,14 @@ export const locationWsPlugin = new Elysia().ws('/ws/location', {
   },
 });
 
-export const locationHttpPlugin = new Elysia({ prefix: '/location' }).post(
+export const locationHttpPlugin = new Elysia({ prefix: '/location' }).use(authGuard).post(
   '/update',
   ({ user, body, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { error: 'Unauthorized' };
-    }
     return safeCall(async () => {
       const driverId = await getDriverIdByUserId(user.id);
       await upsertLocation(driverId, body.lat, body.lng, body.heading);
       return { message: 'Location updated' };
     }, set);
   },
-  { body: locationUpdateBody },
+  { body: locationUpdateBody, requireAuth: true },
 );
