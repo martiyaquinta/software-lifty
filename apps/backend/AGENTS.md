@@ -22,6 +22,20 @@ bun test             # correr tests (194 tests, 17 suites)
 - `POST /auth/logout` → revoca todos los refresh tokens
 - Variables requeridas: `JWT_SECRET` (min 32 chars), `RESEND_API_KEY`, `DATABASE_URL`
 
+## Endpoints públicos
+
+`GET /api/drivers/:id/profile` es el **único endpoint sin autenticación** de la API. Expone
+el perfil público del conductor para que un pasajero pueda verlo.
+
+- **Sin auth**: no requiere JWT.
+- **Rate limit propio**: 10 req/min por IP (más estricto que el global de 100). Configurable
+  con `PUBLIC_PROFILE_RATE_LIMIT_MAX` y `PUBLIC_PROFILE_RATE_LIMIT_WINDOW_MS`.
+- **Datos expuestos**: `full_name` (solo primer nombre), `avatar_url`, `rating_avg`,
+  `total_trips`, `kyc_verified`, y datos del vehículo (`brand`, `model`, `year`, `color`).
+  No expone teléfono, email, patente ni identidad completa.
+
+Cualquier endpoint público nuevo debe documentarse aquí y llevar su propio rate limit.
+
 ## Conexión a la DB (`DATABASE_URL`)
 
 La app conecta a Postgres via `pg` Pool (`src/shared/db/client.ts`). **Usar siempre el connection pooler de Supabase**, no el host directo.

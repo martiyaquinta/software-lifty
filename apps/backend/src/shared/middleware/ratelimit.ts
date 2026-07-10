@@ -4,11 +4,15 @@ import { getRedis } from '../lib/redis';
 interface RateLimitConfig {
   windowMs: number;
   max: number;
+  name: string;
+  keyPrefix: string;
 }
 
 export function rateLimit(config?: Partial<RateLimitConfig>) {
   const windowMs = (config?.windowMs ?? Number(process.env.RATE_LIMIT_WINDOW_MS)) || 60_000;
   const max = (config?.max ?? Number(process.env.RATE_LIMIT_MAX)) || 60;
+  const name = config?.name ?? 'rate-limit';
+  const keyPrefix = config?.keyPrefix ?? 'ratelimit:ip';
   const redis = getRedis();
 
   if (!redis) {
@@ -24,7 +28,7 @@ export function rateLimit(config?: Partial<RateLimitConfig>) {
       (cleanup as any).unref();
     }
 
-    return new Elysia({ name: 'rate-limit' }).onBeforeHandle(({ request, set }) => {
+    return new Elysia({ name }).onBeforeHandle(({ request, set }) => {
       const rawForwarded = request.headers.get('x-forwarded-for');
       const ip = rawForwarded ? rawForwarded.split(',')[0].trim() : '127.0.0.1';
       const now = Date.now();
@@ -44,10 +48,10 @@ export function rateLimit(config?: Partial<RateLimitConfig>) {
     });
   }
 
-  return new Elysia({ name: 'rate-limit' }).onBeforeHandle(async ({ request, set }) => {
+  return new Elysia({ name }).onBeforeHandle(async ({ request, set }) => {
     const rawForwarded = request.headers.get('x-forwarded-for');
     const ip = rawForwarded ? rawForwarded.split(',')[0].trim() : '127.0.0.1';
-    const key = `ratelimit:ip:${ip}`;
+    const key = `${keyPrefix}:${ip}`;
     const windowSeconds = Math.ceil(windowMs / 1000);
 
     const count = await redis.incr(key);

@@ -1,4 +1,5 @@
 import { Elysia } from 'elysia';
+import { rateLimit } from '../../shared/middleware/ratelimit';
 import { authGuard } from '../../shared/middleware/require-auth';
 import {
   addDocumentBody,
@@ -12,15 +13,32 @@ import { driversService } from './service';
 
 import { safeCall } from '../../shared/lib/route-utils';
 
+const publicProfileRateLimit = rateLimit({
+  name: 'rate-limit-public-profile',
+  keyPrefix: 'ratelimit:public-profile:ip',
+  max: Number(process.env.PUBLIC_PROFILE_RATE_LIMIT_MAX) || 10,
+  windowMs: Number(process.env.PUBLIC_PROFILE_RATE_LIMIT_WINDOW_MS) || 60_000,
+}).as('scoped');
+
+const publicProfileRoutes = new Elysia().use(publicProfileRateLimit).get(
+  '/:id/profile',
+  ({ params: { id }, set }) => {
+    return safeCall(() => driversService.getPublicProfile(id), set);
+  },
+  {
+    params: driverIdParams,
+    detail: {
+      tags: ['drivers'],
+      summary: 'Perfil público del conductor',
+      description:
+        'Endpoint PÚBLICO (sin autenticación). Rate limit: 10 req/min por IP. Devuelve solo el primer nombre del conductor.',
+    },
+  },
+);
+
 export const driversRoutes = new Elysia({ prefix: '/drivers' })
   .use(authGuard)
-  .get(
-    '/:id/profile',
-    ({ params: { id }, set }) => {
-      return safeCall(() => driversService.getPublicProfile(id), set);
-    },
-    { params: driverIdParams },
-  )
+  .use(publicProfileRoutes)
   .get('/me', ({ user, set }) => safeCall(() => driversService.getMyProfile(user), set), {
     requireAuth: true,
   })

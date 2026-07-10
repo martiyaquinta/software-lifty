@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
 import { driverDocuments, drivers, refreshTokens, users, vehicles } from '../../shared/db/schema';
+import { getRedis } from '../../shared/lib/redis';
 import { createTestToken } from '../../shared/testing/utils';
 
 let app: any;
@@ -69,6 +70,15 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await truncateTables();
+  const redis = getRedis();
+  if (redis) {
+    try {
+      const keys = await redis.keys('ratelimit:public-profile:ip:*');
+      if (keys.length > 0) await redis.del(...keys);
+    } catch {
+      /* best-effort */
+    }
+  }
 });
 
 afterAll(async () => {
@@ -87,7 +97,7 @@ describe('Driver Profile', () => {
 
     expect(status).toBe(200);
     expect(data.id).toBe(driverId);
-    expect(data.full_name).toBe('Juan Perez');
+    expect(data.full_name).toBe('Juan');
     expect(data.avatar_url).toBeNull();
     expect(data.rating_avg).toBe(0);
     expect(data.total_trips).toBe(0);
@@ -242,6 +252,60 @@ describe('Driver Profile', () => {
     expect(data.vehicle.color).toBe('Blanco');
     expect(data.vehicle.plate).toBe('ABC123');
     expect(data.vehicle.vehicle_type).toBe('car');
+  });
+
+  test('GET /:id/profile enforces strict public rate limit', async () => {
+    const { driverId } = await fullOnboarding(phone, password);
+    const ip = '203.0.113.7';
+
+    const call = async () => {
+      const req = new Request(`http://localhost/api/drivers/${driverId}/profile`, {
+        method: 'GET',
+        headers: { 'x-forwarded-for': ip },
+      });
+      return app.handle(req);
+    };
+
+    for (let i = 0; i < 11; i++) {
+      const res = await call();
+      if (i < 10) {
+        expect(res.status).toBe(200);
+      } else {
+        expect(res.status).toBe(429);
+      }
+    }
+  });
+
+  test('/me routes are NOT throttled by the public profile rate limiter', async () => {
+    const { driverId, token } = await fullOnboarding(phone, password);
+    const ip = '203.0.113.99';
+
+    const publicCall = async () => {
+      const req = new Request(`http://localhost/api/drivers/${driverId}/profile`, {
+        method: 'GET',
+        headers: { 'x-forwarded-for': ip },
+      });
+      return app.handle(req);
+    };
+
+    const authCall = async () => {
+      const req = new Request('http://localhost/api/drivers/me', {
+        method: 'GET',
+        headers: { 'x-forwarded-for': ip, Authorization: `Bearer ${token}` },
+      });
+      return app.handle(req);
+    };
+
+    for (let i = 0; i < 10; i++) {
+      const res = await publicCall();
+      expect(res.status).toBe(200);
+    }
+
+    const publicRes = await publicCall();
+    expect(publicRes.status).toBe(429);
+
+    const authRes = await authCall();
+    expect(authRes.status).toBe(200);
   });
 });
 
