@@ -7,11 +7,12 @@ process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
 process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
 import { createApp } from './index';
 import { getDb, resetDb } from './shared/db/client';
 import { users } from './shared/db/schema';
+import { logger } from './shared/lib/logger';
 import { getRedis } from './shared/lib/redis';
 import { createTestToken } from './shared/testing/utils';
 
@@ -236,13 +237,61 @@ describe('Auth', () => {
       .where(eq(users.email, email));
     const wrongCode = created.code === '000000' ? '111111' : '000000';
 
-    for (let i = 0; i < 5; i++) {
-      await req('POST', '/api/auth/verify', { email, code: wrongCode });
+    const warnSpy = spyOn(logger, 'warn');
+    try {
+      for (let i = 0; i < 5; i++) {
+        await req('POST', '/api/auth/verify', { email, code: wrongCode });
+      }
+      // even the right code is rejected now
+      const locked = await req('POST', '/api/auth/verify', { email, code: created.code });
+      expect(locked.status).toBe(400);
+      expect(locked.data.error.message).toContain('Demasiados');
+      // the lockout must be logged so it can be alerted on
+      expect(warnSpy.mock.calls.some((c) => String(c[0]).toLowerCase().includes('locked'))).toBe(
+        true,
+      );
+    } finally {
+      warnSpy.mockRestore();
     }
-    // even the right code is rejected now
-    const locked = await req('POST', '/api/auth/verify', { email, code: created.code });
-    expect(locked.status).toBe(400);
-    expect(locked.data.error.message).toContain('Demasiados');
+  });
+
+  test('reset-password locks after 5 wrong attempts and logs lockout', async () => {
+    const db = getDb();
+    const email = 'reset.lock@example.com';
+    await req('POST', '/api/auth/register', { email, password: pw });
+    // issue a reset code (no cooldown right after register)
+    expect((await req('POST', '/api/auth/forgot-password', { email })).status).toBe(200);
+    const [row] = await db
+      .select({ code: users.reset_code })
+      .from(users)
+      .where(eq(users.email, email));
+    expect(row.code).toHaveLength(6);
+    const wrongCode = row.code === '000000' ? '111111' : '000000';
+
+    const warnSpy = spyOn(logger, 'warn');
+    try {
+      for (let i = 0; i < 5; i++) {
+        await req('POST', '/api/auth/reset-password', {
+          email,
+          code: wrongCode,
+          password: 'newPass123',
+        });
+      }
+      // even the right code is rejected now
+      const locked = await req('POST', '/api/auth/reset-password', {
+        email,
+        code: row.code,
+        password: 'newPass123',
+      });
+      expect(locked.status).toBe(400);
+      expect(locked.data.error.message).toContain('Demasiados');
+      // the lockout must be logged so it can be alerted on
+      expect(warnSpy.mock.calls.some((c) => String(c[0]).toLowerCase().includes('locked'))).toBe(
+        true,
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
 
