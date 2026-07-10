@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
 import { driverDocuments, drivers, refreshTokens, users, vehicles } from '../../shared/db/schema';
+import { getRedis } from '../../shared/lib/redis';
 import { createTestToken } from '../../shared/testing/utils';
 
 let app: any;
@@ -69,6 +70,15 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await truncateTables();
+  const redis = getRedis();
+  if (redis) {
+    try {
+      const keys = await redis.keys('ratelimit:public-profile:ip:*');
+      if (keys.length > 0) await redis.del(...keys);
+    } catch {
+      /* best-effort */
+    }
+  }
 });
 
 afterAll(async () => {
@@ -242,6 +252,27 @@ describe('Driver Profile', () => {
     expect(data.vehicle.color).toBe('Blanco');
     expect(data.vehicle.plate).toBe('ABC123');
     expect(data.vehicle.vehicle_type).toBe('car');
+  });
+
+  test('GET /:id/profile enforces strict public rate limit', async () => {
+    const { driverId } = await fullOnboarding(phone, password);
+    const ip = '203.0.113.7';
+
+    const call = async () => {
+      const req = new Request(`http://localhost/api/drivers/${driverId}/profile`, {
+        method: 'GET',
+        headers: { 'x-forwarded-for': ip },
+      });
+      return app.handle(req);
+    };
+
+    let last = 200;
+    for (let i = 0; i < 11; i++) {
+      const res = await call();
+      last = res.status;
+    }
+
+    expect(last).toBe(429);
   });
 });
 
