@@ -93,7 +93,8 @@ export const OnboardingStep1Screen: React.FC = () => {
       try {
         const compressed = await compressImage(asset.uri);
         setPhotoUri(compressed.uri);
-      } catch {
+      } catch (err) {
+        console.warn('Image compression failed, using original:', err);
         setPhotoUri(asset.uri);
       }
     }

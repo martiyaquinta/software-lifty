@@ -144,14 +144,18 @@ export const OnboardingStep2Screen: React.FC = () => {
             uri = compressed.uri;
             name = name?.replace(/\.[^.]+$/, '.jpg') ?? `photo_${Date.now()}.jpg`;
             mimeType = 'image/jpeg';
-          } catch {}
+          } catch (err) {
+            console.warn('Image compression failed, using original:', err);
+          }
         } else if (mimeType?.startsWith('image/') && uri) {
           try {
             const compressed = await compressImage(uri);
             uri = compressed.uri;
             name = name?.replace(/\.[^.]+$/, '.jpg') ?? `doc_${Date.now()}.jpg`;
             mimeType = 'image/jpeg';
-          } catch {}
+          } catch (err) {
+            console.warn('Image compression failed, using original:', err);
+          }
         }
 
         setDocs((prev) => ({
