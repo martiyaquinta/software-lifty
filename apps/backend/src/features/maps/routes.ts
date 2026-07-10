@@ -1,43 +1,30 @@
 import { Elysia } from 'elysia';
+import { authGuard } from '../../shared/middleware/require-auth';
 import { autocompleteQuery, directionsQuery, fareEstimateBody, geocodeQuery } from './schema';
 import { mapsService } from './service';
 
 import { safeCall } from '../../shared/lib/route-utils';
 
 export const mapsRoutes = new Elysia({ prefix: '/maps' })
+  .use(authGuard)
   .get(
     '/places/autocomplete',
-    ({ user, query, set }) => {
-      if (!user) {
-        set.status = 401;
-        return { error: 'Unauthorized' };
-      }
-      return safeCall(() => mapsService.autocomplete(query.input), set);
-    },
-    { query: autocompleteQuery },
+    ({ query, set }) => safeCall(() => mapsService.autocomplete(query.input), set),
+    { query: autocompleteQuery, requireAuth: true },
   )
   .get(
     '/geocode',
-    ({ user, query, set }) => {
-      if (!user) {
-        set.status = 401;
-        return { error: 'Unauthorized' };
-      }
-      return safeCall(
+    ({ query, set }) =>
+      safeCall(
         () => mapsService.geocode({ lat: query.lat, lng: query.lng, address: query.address }),
         set,
-      );
-    },
-    { query: geocodeQuery },
+      ),
+    { query: geocodeQuery, requireAuth: true },
   )
   .get(
     '/directions',
-    ({ user, query, set }) => {
-      if (!user) {
-        set.status = 401;
-        return { error: 'Unauthorized' };
-      }
-      return safeCall(
+    ({ query, set }) =>
+      safeCall(
         () =>
           mapsService.directions(
             query.origin_lat,
@@ -46,18 +33,13 @@ export const mapsRoutes = new Elysia({ prefix: '/maps' })
             query.dest_lng,
           ),
         set,
-      );
-    },
-    { query: directionsQuery },
+      ),
+    { query: directionsQuery, requireAuth: true },
   )
   .post(
     '/fare-estimate',
-    ({ user, body, set }) => {
-      if (!user) {
-        set.status = 401;
-        return { error: 'Unauthorized' };
-      }
-      return safeCall(
+    ({ body, set }) =>
+      safeCall(
         () =>
           mapsService.fareEstimate(
             body.origin_lat,
@@ -67,7 +49,6 @@ export const mapsRoutes = new Elysia({ prefix: '/maps' })
             body.vehicle_type,
           ),
         set,
-      );
-    },
-    { body: fareEstimateBody },
+      ),
+    { body: fareEstimateBody, requireAuth: true },
   );

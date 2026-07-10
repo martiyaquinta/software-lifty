@@ -1,25 +1,19 @@
 import { Elysia } from 'elysia';
+import { authGuard } from '../../shared/middleware/require-auth';
 import { historyQuery } from './schema';
 import { earningsService } from './service';
 
 import { safeCall } from '../../shared/lib/route-utils';
 
 export const earningsRoutes = new Elysia({ prefix: '/earnings' })
-  .get('/summary', ({ user, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { error: 'Unauthorized' };
-    }
-    return safeCall(() => earningsService.getSummary(user), set);
+  .use(authGuard)
+  .get('/summary', ({ user, set }) => safeCall(() => earningsService.getSummary(user), set), {
+    requireAuth: true,
   })
   .get(
     '/history',
-    ({ user, query, set }) => {
-      if (!user) {
-        set.status = 401;
-        return { error: 'Unauthorized' };
-      }
-      return safeCall(
+    ({ user, query, set }) =>
+      safeCall(
         () =>
           earningsService.getHistory(
             user,
@@ -29,23 +23,19 @@ export const earningsRoutes = new Elysia({ prefix: '/earnings' })
             query.to as string | undefined,
           ),
         set,
-      );
-    },
-    { query: historyQuery },
+      ),
+    { query: historyQuery, requireAuth: true },
   );
 
 export const driverStatsRoutes = new Elysia({ prefix: '/drivers' })
-  .get('/me/stats', ({ user, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { error: 'Unauthorized' };
-    }
-    return safeCall(() => earningsService.getStats(user), set);
+  .use(authGuard)
+  .get('/me/stats', ({ user, set }) => safeCall(() => earningsService.getStats(user), set), {
+    requireAuth: true,
   })
-  .get('/me/earnings/daily', ({ user, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { error: 'Unauthorized' };
-    }
-    return safeCall(() => earningsService.getDaily(user), set);
-  });
+  .get(
+    '/me/earnings/daily',
+    ({ user, set }) => safeCall(() => earningsService.getDaily(user), set),
+    {
+      requireAuth: true,
+    },
+  );

@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia';
 import { verifyHmac } from '../../shared/lib/didit';
 import { safeCall } from '../../shared/lib/route-utils';
+import { authGuard } from '../../shared/middleware/require-auth';
 import { decisionParams, sessionParams } from './schema';
 import { kycService, mapKycStatus } from './service';
 
@@ -28,34 +29,20 @@ function extractWebhookData(body: any): {
 }
 
 export const kycRoutes = new Elysia({ prefix: '/kyc' })
-  .get('/me/session', ({ user, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { error: 'Unauthorized' };
-    }
-    return safeCall(() => kycService.createUserSession(user), set);
+  .use(authGuard)
+  .get('/me/session', ({ user, set }) => safeCall(() => kycService.createUserSession(user), set), {
+    requireAuth: true,
   })
   .get(
     '/session/:driver_id',
-    ({ user, params, set }) => {
-      if (!user) {
-        set.status = 401;
-        return { error: 'Unauthorized' };
-      }
-      return safeCall(() => kycService.getSession(user, params.driver_id), set);
-    },
-    { params: sessionParams },
+    ({ user, params, set }) => safeCall(() => kycService.getSession(user, params.driver_id), set),
+    { params: sessionParams, requireAuth: true },
   )
   .get(
     '/decision/:session_id',
-    ({ user, params, set }) => {
-      if (!user) {
-        set.status = 401;
-        return { error: 'Unauthorized' };
-      }
-      return safeCall(() => kycService.refreshDecision(user, params.session_id), set);
-    },
-    { params: decisionParams },
+    ({ user, params, set }) =>
+      safeCall(() => kycService.refreshDecision(user, params.session_id), set),
+    { params: decisionParams, requireAuth: true },
   )
   .post('/webhook/didit', async ({ request, set }) => {
     // DIDIT sends X-Signature (raw-body HMAC) and X-Signature-V2 (canonical);

@@ -1,18 +1,16 @@
 import { Elysia } from 'elysia';
+import { authGuard } from '../../shared/middleware/require-auth';
 import { addPaymentMethodBody } from './schema';
 import { paymentMethodsService } from './service';
 
 import { safeCall } from '../../shared/lib/route-utils';
 
 export const paymentMethodsRoutes = new Elysia({ prefix: '/drivers/me/payment-methods' })
+  .use(authGuard)
   .post(
     '/',
-    ({ user, body, set }) => {
-      if (!user) {
-        set.status = 401;
-        return { error: 'Unauthorized' };
-      }
-      return safeCall(
+    ({ user, body, set }) =>
+      safeCall(
         () =>
           paymentMethodsService.addMethod(
             user,
@@ -22,21 +20,15 @@ export const paymentMethodsRoutes = new Elysia({ prefix: '/drivers/me/payment-me
             body.wallet,
           ),
         set,
-      );
-    },
-    { body: addPaymentMethodBody },
+      ),
+    { body: addPaymentMethodBody, requireAuth: true },
   )
-  .get('/', ({ user, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { error: 'Unauthorized' };
-    }
-    return safeCall(() => paymentMethodsService.getMethods(user), set);
+  .get('/', ({ user, set }) => safeCall(() => paymentMethodsService.getMethods(user), set), {
+    requireAuth: true,
   })
-  .delete('/:id', ({ user, params, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { error: 'Unauthorized' };
-    }
-    return safeCall(() => paymentMethodsService.deleteMethod(user, params.id), set);
-  });
+  .delete(
+    '/:id',
+    ({ user, params, set }) =>
+      safeCall(() => paymentMethodsService.deleteMethod(user, params.id), set),
+    { requireAuth: true },
+  );
