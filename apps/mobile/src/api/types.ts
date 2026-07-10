@@ -71,28 +71,40 @@ export const driverStatusSchema = z.object({
   documents_pending_review: z.boolean().optional(),
 });
 
+export const tripStatusSchema = z.enum([
+  'request_received',
+  'accepted',
+  'en_route',
+  'waiting',
+  'in_trip',
+  'completed',
+  'rejected',
+  'cancelled',
+  'cancelled_early',
+  'cancelled_late',
+  'rated',
+]);
+
 export const tripSchema = z.object({
   id: z.string(),
   driver_id: z.string(),
   passenger_id: z.string().nullable(),
-  status: z.enum([
-    'requested',
-    'accepted',
-    'driver_arrived',
-    'in_progress',
-    'completed',
-    'cancelled',
-  ]),
-  pickup_address: z.string(),
-  pickup_lat: z.number(),
-  pickup_lng: z.number(),
-  destination_address: z.string(),
-  destination_lat: z.number(),
-  destination_lng: z.number(),
-  amount: z.number(),
-  commission: z.number(),
-  driver_earnings: z.number(),
-  payment_method: z.enum(['cash', 'mercadopago']).nullable(),
+  status: tripStatusSchema,
+  origin_address: z.string().nullable(),
+  origin_lat: z.number(),
+  origin_lng: z.number(),
+  dest_address: z.string().nullable(),
+  dest_lat: z.number(),
+  dest_lng: z.number(),
+  distance_km: z.number().nullable(),
+  duration_minutes: z.number().nullable(),
+  base_fare: z.number().nullable(),
+  distance_fare: z.number().nullable(),
+  time_fare: z.number().nullable(),
+  total_fare: z.number().nullable(),
+  platform_fee: z.number().nullable(),
+  driver_earnings: z.number().nullable(),
+  payment_method: z.string().nullable(),
   is_collected: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -130,5 +142,6 @@ export type Driver = z.infer<typeof driverSchema>;
 export type DriverStatus = z.infer<typeof driverStatusSchema>;
 export type EarningsDaily = z.infer<typeof earningsDailySchema>;
 export type Trip = z.infer<typeof tripSchema>;
+export type TripStatus = z.infer<typeof tripStatusSchema>;
 export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
 export type DriverDocument = z.infer<typeof documentSchema>;

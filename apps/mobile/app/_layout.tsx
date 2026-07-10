@@ -19,6 +19,7 @@ import {
 import { queryClient } from '../src/lib/queryClient';
 import { supabase } from '../src/lib/supabase';
 import { useAuthStore } from '../src/store/authStore';
+import { useTripStore } from '../src/store/tripStore';
 import { theme } from '../src/theme';
 
 function SessionRestore() {
@@ -73,19 +74,21 @@ function ActiveTripRecovery() {
         const response = await apiClient.get('/trips/active');
         const trip = response.data?.data ?? response.data;
         if (trip) {
+          useTripStore.getState().setActiveTrip(trip.id, trip.status);
           InteractionManager.runAfterInteractions(() => {
             switch (trip.status) {
+              case 'request_received':
+                router.replace('/incoming-request');
+                break;
               case 'accepted':
+              case 'en_route':
                 router.replace('/navigation');
                 break;
-              case 'driver_arrived':
+              case 'waiting':
                 router.replace('/waiting-passenger');
                 break;
-              case 'in_progress':
+              case 'in_trip':
                 router.replace('/trip-in-progress');
-                break;
-              case 'requested':
-                router.replace('/incoming-request');
                 break;
               default:
                 break;

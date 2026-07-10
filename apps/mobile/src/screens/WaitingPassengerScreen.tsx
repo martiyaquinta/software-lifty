@@ -31,9 +31,10 @@ export const WaitingPassengerScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const chatScrollRef = useRef<ScrollView>(null);
 
-  const activeTripId = useTripStore((s) => s.activeTripId) ?? 'mock-trip-123';
+  const activeTripId = useTripStore((s) => s.activeTripId);
+  const setTripStatus = useTripStore((s) => s.setTripStatus);
   const clearTrip = useTripStore((s) => s.clearTrip);
-  const driverId = useAuthStore((s) => s.driverId) ?? 'mock-driver-123';
+  const driverId = useAuthStore((s) => s.driverId);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -43,6 +44,7 @@ export const WaitingPassengerScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!activeTripId) return;
     const unsubscribe = subscribeToTripChannel(activeTripId, {
       onMessage: (msg) => {
         setMessages((prev) => [...prev, msg]);
@@ -55,7 +57,7 @@ export const WaitingPassengerScreen: React.FC = () => {
 
   const handleSend = async () => {
     const text = inputText.trim();
-    if (!text) return;
+    if (!text || !activeTripId || !driverId) return;
 
     setInputText('');
 
@@ -80,9 +82,11 @@ export const WaitingPassengerScreen: React.FC = () => {
   const hasTimeLeft = seconds > 0;
 
   const handleStartTrip = async () => {
+    if (!activeTripId) return;
     setLoading(true);
     try {
-      await apiClient.put(`/trips/${activeTripId}/start`);
+      await apiClient.post(`/trips/${activeTripId}/start`);
+      setTripStatus('in_trip');
       navigation.navigate('TripInProgress');
     } catch {
       Alert.alert('Error', 'No se pudo iniciar el viaje.');
@@ -92,10 +96,11 @@ export const WaitingPassengerScreen: React.FC = () => {
   };
 
   const handleCancelConfirm = async () => {
+    if (!activeTripId) return;
     setShowModal(false);
     setLoading(true);
     try {
-      await apiClient.put(`/trips/${activeTripId}/cancel`);
+      await apiClient.post(`/trips/${activeTripId}/cancel`);
       clearTrip();
       navigation.navigate('Online');
     } catch {

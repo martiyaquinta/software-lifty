@@ -1,5 +1,6 @@
 module.exports = {
   preset: 'jest-expo',
+  setupFiles: ['<rootDir>/jest.setup.js'],
   // Bun hoists packages to node_modules/.bun/<name>@<version>/node_modules/<name>,
   // so the classic "node_modules/(?!react-native|...)" pattern never matches and
   // leaves RN/Expo ESM untransformed. Match the .bun layout instead.

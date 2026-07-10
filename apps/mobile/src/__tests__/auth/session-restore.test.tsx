@@ -2,6 +2,8 @@ const mockRouterReplace = jest.fn();
 let mockNeedsRedirect = false;
 let mockIsAuthenticated = false;
 let mockSegments: (string | undefined)[] = [''];
+let mockOnboardingStep: string | null = null;
+let mockDriverStatus: string | null = null;
 const mockResetRedirect = jest.fn();
 
 jest.mock('expo-router', () => ({
@@ -14,6 +16,8 @@ jest.mock('../../store/authStore', () => ({
     selector({
       needsRedirect: mockNeedsRedirect,
       isAuthenticated: mockIsAuthenticated,
+      onboardingStep: mockOnboardingStep,
+      driverStatus: mockDriverStatus,
       resetRedirect: mockResetRedirect,
     }),
 }));
@@ -30,6 +34,8 @@ describe('AuthRedirectWatcher', () => {
     mockNeedsRedirect = false;
     mockIsAuthenticated = false;
     mockSegments = [''];
+    mockOnboardingStep = null;
+    mockDriverStatus = null;
     // Run scheduled interactions synchronously in tests.
     jest
       .spyOn(InteractionManager, 'runAfterInteractions')
@@ -56,6 +62,7 @@ describe('AuthRedirectWatcher', () => {
   test('redirects to /online when authenticated on a public route', async () => {
     mockIsAuthenticated = true;
     mockSegments = [''];
+    mockDriverStatus = 'approved';
 
     await act(async () => {
       render(React.createElement(AuthRedirectWatcher));

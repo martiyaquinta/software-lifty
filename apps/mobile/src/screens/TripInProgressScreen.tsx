@@ -18,18 +18,20 @@ const MOCK_ROUTE: Array<[number, number]> = [
 export const TripInProgressScreen: React.FC = () => {
   const navigation = useAppNavigation();
   const activeTripId = useTripStore((s) => s.activeTripId);
+  const setTripStatus = useTripStore((s) => s.setTripStatus);
   const [completing, setCompleting] = React.useState(false);
 
   const handleCompleteTrip = async () => {
     if (!activeTripId) return;
     setCompleting(true);
     try {
-      const response = await apiClient.put(`/trips/${activeTripId}/complete`);
-      const { amount, commission, driver_earnings } = response.data;
+      const response = await apiClient.post(`/trips/${activeTripId}/complete`);
+      const trip = response.data?.data ?? response.data;
+      setTripStatus('completed');
       navigation.navigate('TripComplete', {
-        amount: String(amount ?? 2500),
-        commission: String(commission ?? 500),
-        driverEarnings: String(driver_earnings ?? 2000),
+        amount: String(trip?.total_fare ?? 2500),
+        commission: String(trip?.platform_fee ?? 500),
+        driverEarnings: String(trip?.driver_earnings ?? 2000),
       });
     } catch {
       navigation.navigate('TripComplete');
