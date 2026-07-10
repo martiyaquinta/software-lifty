@@ -59,7 +59,7 @@ export const driversService = {
 
     return {
       id: row.id,
-      full_name: row.full_name,
+      full_name: row.full_name ? row.full_name.split(' ')[0] : row.full_name,
       avatar_url: row.avatar_url,
       rating_avg: row.rating_avg,
       total_trips: row.total_trips,

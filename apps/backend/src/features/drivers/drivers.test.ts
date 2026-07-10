@@ -87,7 +87,7 @@ describe('Driver Profile', () => {
 
     expect(status).toBe(200);
     expect(data.id).toBe(driverId);
-    expect(data.full_name).toBe('Juan Perez');
+    expect(data.full_name).toBe('Juan');
     expect(data.avatar_url).toBeNull();
     expect(data.rating_avg).toBe(0);
     expect(data.total_trips).toBe(0);
