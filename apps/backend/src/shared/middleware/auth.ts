@@ -30,7 +30,7 @@ export const authPlugin = new Elysia({ name: 'auth' }).derive(
       };
     }
 
-    let userRow = await db
+    const userRow = await db
       .select({
         id: users.id,
         role: users.role,
@@ -42,28 +42,10 @@ export const authPlugin = new Elysia({ name: 'auth' }).derive(
       .limit(1)
       .then((rows) => rows[0] ?? null);
 
-    if (!userRow) {
-      await db.insert(users).values({
-        id: result.payload.sub,
-        role: 'driver',
-        email: null,
-        phone: null,
-        password_hash: 'supabase',
-      });
-
-      userRow = await db
-        .select({
-          id: users.id,
-          role: users.role,
-          email: users.email,
-          phone: users.phone,
-        })
-        .from(users)
-        .where(eq(users.id, result.payload.sub))
-        .limit(1)
-        .then((rows) => rows[0] ?? null);
-    }
-
+    // A valid token whose subject has no matching user is NOT authenticated.
+    // Users are created exclusively through POST /auth/register — never here.
+    // Auto-provisioning let anyone with any valid JWT (e.g. a Supabase token)
+    // gain a `driver` account without going through registration.
     if (!userRow) {
       return { user: null, authStatus: 'token_invalid' };
     }
