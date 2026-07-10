@@ -18,7 +18,7 @@ const publicProfileRateLimit = rateLimit({
   keyPrefix: 'ratelimit:public-profile:ip',
   max: Number(process.env.PUBLIC_PROFILE_RATE_LIMIT_MAX) || 10,
   windowMs: Number(process.env.PUBLIC_PROFILE_RATE_LIMIT_WINDOW_MS) || 60_000,
-}).as('plugin');
+}).as('scoped');
 
 export const driversRoutes = new Elysia({ prefix: '/drivers' })
   .use(authGuard)
