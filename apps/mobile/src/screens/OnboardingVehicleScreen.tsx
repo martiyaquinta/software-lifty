@@ -32,9 +32,11 @@ const PLATE_REGEX = /^[A-Z]{2,3}[0-9]{3}[A-Z]{0,2}$/;
 const VEHICLE_TYPES: VehicleType[] = ['Auto', 'Moto', 'Camioneta'];
 const CURRENT_YEAR = new Date().getFullYear();
 
+const normalizePlate = (value: string) => value.replace(/\s+/g, '').toUpperCase();
+
 const validatePlate = (value: string) => {
   if (!value.trim()) return undefined;
-  if (!PLATE_REGEX.test(value.toUpperCase())) return 'Formato invalido (ej: ABC123)';
+  if (!PLATE_REGEX.test(normalizePlate(value))) return 'Formato invalido (ej: ABC123)';
   return undefined;
 };
 
@@ -102,7 +104,7 @@ export const OnboardingVehicleScreen: React.FC = () => {
 
     try {
       await apiClient.put('/drivers/me', {
-        vehicle_plate: vehiclePlate.trim().toUpperCase(),
+        vehicle_plate: normalizePlate(vehiclePlate),
         vehicle_brand: vehicleBrand.trim(),
         vehicle_model: vehicleModel.trim(),
         vehicle_color: vehicleColor.trim(),
@@ -163,7 +165,7 @@ export const OnboardingVehicleScreen: React.FC = () => {
             error={errors.vehiclePlate}
             containerStyle={styles.input}
             autoCapitalize="characters"
-            maxLength={8}
+            maxLength={9}
           />
           <View style={styles.row}>
             <Input
@@ -243,6 +245,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
+    flexGrow: 1,
+    justifyContent: 'center',
     alignItems: 'center',
     padding: theme.spacing.md,
     paddingBottom: theme.spacing['2xl'],
