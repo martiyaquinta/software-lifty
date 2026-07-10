@@ -129,11 +129,13 @@ export const EarningsScreen: React.FC = () => {
                     <View style={styles.tripLeft}>
                       <Text style={styles.tripTime}>{formatTime(trip.created_at)}</Text>
                       <Text style={styles.tripOrigin} numberOfLines={1}>
-                        {shortAddress(trip.pickup_address)}
+                        {shortAddress(trip.origin_address ?? '')}
                       </Text>
                     </View>
                     <View style={styles.tripRight}>
-                      <Text style={styles.tripAmount}>{formatCurrency(trip.driver_earnings)}</Text>
+                      <Text style={styles.tripAmount}>
+                        {formatCurrency(trip.driver_earnings ?? 0)}
+                      </Text>
                       <Text style={styles.tripPayment}>
                         {paymentMethodLabel(trip.payment_method)}
                       </Text>

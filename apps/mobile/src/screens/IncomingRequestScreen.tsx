@@ -2,6 +2,7 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { apiClient } from '../api/client';
+import type { Trip } from '../api/types';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { MapView } from '../components/MapView';
@@ -11,13 +12,19 @@ import { useOnlineStore } from '../store/onlineStore';
 import { useTripStore } from '../store/tripStore';
 import { theme } from '../theme';
 
-const MOCK_TRIP_ID = 'mock-trip-123';
+const RESPONSE_SECONDS = 8;
+
+const formatCurrency = (value: number | null | undefined) =>
+  value == null ? '—' : `$${value.toLocaleString('es-AR')}`;
+
+const formatDistance = (value: number | null | undefined) => (value == null ? '' : `${value} km`);
 
 export const IncomingRequestScreen: React.FC = () => {
   const navigation = useAppNavigation();
   const { setActiveTrip } = useTripStore();
   const setOnline = useOnlineStore((s) => s.setOnline);
-  const [seconds, setSeconds] = useState(8);
+  const [trip, setTrip] = useState<Trip | null>(null);
+  const [seconds, setSeconds] = useState(RESPONSE_SECONDS);
   const [accepted, setAccepted] = useState(false);
   const timedOut = useRef(false);
 
@@ -29,11 +36,35 @@ export const IncomingRequestScreen: React.FC = () => {
   };
 
   useEffect(() => {
-    if (accepted || timedOut.current) return;
+    let cancelled = false;
+    const loadTrip = async () => {
+      try {
+        const response = await apiClient.get('/trips/active');
+        const active = (response.data?.data ?? response.data) as Trip | null;
+        if (cancelled) return;
+        if (active && active.status === 'request_received') {
+          setTrip(active);
+          setActiveTrip(active.id, active.status);
+        } else {
+          navigation.navigate('Online');
+        }
+      } catch {
+        if (!cancelled) navigation.navigate('Online');
+      }
+    };
+    loadTrip();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!trip || accepted || timedOut.current) return;
     if (seconds <= 0) {
       timedOut.current = true;
       apiClient
-        .put(`/trips/${MOCK_TRIP_ID}/respond`, { action: 'timeout' })
+        .post(`/trips/${trip.id}/reject`)
         .catch(() => {})
         .finally(() => {
           navigation.navigate('Online');
@@ -50,20 +81,22 @@ export const IncomingRequestScreen: React.FC = () => {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [seconds, accepted]);
+  }, [seconds, accepted, trip]);
 
   const handleAccept = async () => {
+    if (!trip) return;
     try {
-      await apiClient.put(`/trips/${MOCK_TRIP_ID}/respond`, { action: 'accept' });
-      setActiveTrip(MOCK_TRIP_ID, 'accepted');
+      await apiClient.post(`/trips/${trip.id}/accept`);
+      setActiveTrip(trip.id, 'accepted');
       setAccepted(true);
       navigation.navigate('Navigation');
     } catch {}
   };
 
   const handleReject = async () => {
+    if (!trip) return;
     try {
-      await apiClient.put(`/trips/${MOCK_TRIP_ID}/respond`, { action: 'reject' });
+      await apiClient.post(`/trips/${trip.id}/reject`);
     } catch {}
     try {
       await apiClient.put('/drivers/me/online', { is_online: false });
@@ -88,21 +121,21 @@ export const IncomingRequestScreen: React.FC = () => {
         <Card style={styles.routeCard}>
           <View style={styles.routePoint}>
             <Text style={styles.routeIconStart}>📍</Text>
-            <Text style={styles.routeText}>Av. San Martin 450</Text>
+            <Text style={styles.routeText}>{trip?.origin_address ?? 'Origen'}</Text>
           </View>
           <View style={styles.routeLine}>
-            <Text style={styles.distanceText}>3.2 km</Text>
+            <Text style={styles.distanceText}>{formatDistance(trip?.distance_km)}</Text>
           </View>
           <View style={styles.routePoint}>
             <Text style={styles.routeIconEnd}>📍</Text>
-            <Text style={styles.routeText}>Terminal de Omnibus</Text>
+            <Text style={styles.routeText}>{trip?.dest_address ?? 'Destino'}</Text>
           </View>
         </Card>
 
         <View style={{ height: theme.spacing.md }} />
 
         <Text style={styles.earningsLabel}>Ganaras</Text>
-        <Text style={styles.earningsAmount}>$2.500</Text>
+        <Text style={styles.earningsAmount}>{formatCurrency(trip?.driver_earnings)}</Text>
 
         <View style={{ height: theme.spacing.lg }} />
 

@@ -1,12 +1,7 @@
 import { create } from 'zustand';
+import type { TripStatus } from '../api/types';
 
-type TripStatus =
-  | 'requested'
-  | 'accepted'
-  | 'driver_arrived'
-  | 'in_progress'
-  | 'completed'
-  | 'cancelled';
+export type { TripStatus };
 
 interface TripState {
   activeTripId: string | null;

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { apiClient } from '../api/client';
 import { Button } from '../components/Button';
@@ -13,14 +13,26 @@ const PASSENGER_COORD: [number, number] = [-65.1833, -31.9333];
 export const NavigationScreen: React.FC = () => {
   const navigation = useAppNavigation();
   const [loading, setLoading] = useState(false);
-  const activeTripId = useTripStore((s) => s.activeTripId) ?? 'mock-trip-123';
+  const activeTripId = useTripStore((s) => s.activeTripId);
+  const tripStatus = useTripStore((s) => s.tripStatus);
   const setTripStatus = useTripStore((s) => s.setTripStatus);
+  const enRouteSent = useRef(false);
+
+  useEffect(() => {
+    if (!activeTripId || tripStatus !== 'accepted' || enRouteSent.current) return;
+    enRouteSent.current = true;
+    apiClient
+      .post(`/trips/${activeTripId}/en-route`)
+      .then(() => setTripStatus('en_route'))
+      .catch(() => {});
+  }, [activeTripId, tripStatus, setTripStatus]);
 
   const handleArrive = async () => {
+    if (!activeTripId) return;
     setLoading(true);
     try {
-      await apiClient.put(`/trips/${activeTripId}/arrive`);
-      setTripStatus('driver_arrived');
+      await apiClient.post(`/trips/${activeTripId}/arrived`);
+      setTripStatus('waiting');
       navigation.navigate('WaitingPassenger');
     } catch {
       Alert.alert('Error', 'No se pudo confirmar la llegada.');
