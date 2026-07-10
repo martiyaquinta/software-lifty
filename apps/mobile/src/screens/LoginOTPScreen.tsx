@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { apiClient } from '../api/client';
 import type { DriverStatus } from '../api/types';
@@ -22,23 +22,11 @@ export const LoginOTPScreen: React.FC = () => {
   const [otp, setOtp] = useState('');
   const [cooldown, setCooldown] = useState(0);
   const [statusError, setStatusError] = useState<string | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (cooldown > 0) {
-      intervalRef.current = setInterval(() => {
-        setCooldown((prev) => {
-          if (prev <= 1) {
-            if (intervalRef.current) clearInterval(intervalRef.current);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    if (cooldown <= 0) return;
+    const id = setTimeout(() => setCooldown((prev) => prev - 1), 1000);
+    return () => clearTimeout(id);
   }, [cooldown]);
 
   const handleResend = useCallback(async () => {
