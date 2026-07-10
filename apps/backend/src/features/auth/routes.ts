@@ -87,6 +87,14 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   .get('/me', ({ user, set }) => safeCall(() => authService.getMe(user), set), {
     requireAuth: true,
   })
-  .post('/logout', ({ user, set }) => safeCall(() => authService.logout(user), set), {
-    requireAuth: true,
-  });
+  .post(
+    '/logout',
+    ({ user, request, set }) => {
+      const authHeader = request.headers.get('authorization');
+      const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+      return safeCall(() => authService.logout(user, accessToken), set);
+    },
+    {
+      requireAuth: true,
+    },
+  );

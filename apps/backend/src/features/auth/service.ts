@@ -9,7 +9,7 @@ import {
   TooManyRequestsError,
   UnauthorizedError,
 } from '../../shared/lib/errors';
-import { hashToken, signAccess, signRefresh } from '../../shared/lib/jwt';
+import { hashToken, revokeAccess, signAccess, signRefresh } from '../../shared/lib/jwt';
 import { logger } from '../../shared/lib/logger';
 import type { AuthUser } from '../../shared/middleware/auth';
 
@@ -506,9 +506,14 @@ export const authService = {
     };
   },
 
-  async logout(user: AuthUser) {
+  async logout(user: AuthUser, accessToken?: string) {
     await db.delete(refreshTokens).where(eq(refreshTokens.user_id, user.id));
-    logger.info('[AUTH] Logout — all refresh tokens revoked', { userId: user.id.split('-')[0] });
+    if (accessToken) {
+      await revokeAccess(accessToken);
+    }
+    logger.info('[AUTH] Logout — refresh tokens revoked, access token blacklisted', {
+      userId: user.id.split('-')[0],
+    });
     return { message: 'Logged out successfully' };
   },
 };

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { SignJWT, createRemoteJWKSet, errors as joseErrors, jwtVerify } from 'jose';
+import { SignJWT, createRemoteJWKSet, decodeJwt, errors as joseErrors, jwtVerify } from 'jose';
+import { getRedis } from './redis';
 
 function getBackendSecret(): Uint8Array {
   const s = process.env.JWT_SECRET;
@@ -55,6 +56,37 @@ export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+const BLACKLIST_PREFIX = 'blacklist:access:';
+
+// Revoke an access token before its natural expiry (e.g. on logout). The entry
+// self-expires when the token would have expired anyway, so Redis never grows
+// unbounded. Without Redis there's no blacklist — access tokens live out their
+// full TTL, which is the pre-existing behaviour.
+export async function revokeAccess(token: string): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+
+  let exp: number | undefined;
+  try {
+    exp = decodeJwt(token).exp;
+  } catch {
+    return;
+  }
+  if (!exp) return;
+
+  const ttlSeconds = exp - Math.floor(Date.now() / 1000);
+  if (ttlSeconds <= 0) return;
+
+  await redis.set(`${BLACKLIST_PREFIX}${hashToken(token)}`, '1', 'EX', ttlSeconds);
+}
+
+async function isAccessRevoked(token: string): Promise<boolean> {
+  const redis = getRedis();
+  if (!redis) return false;
+  const hit = await redis.get(`${BLACKLIST_PREFIX}${hashToken(token)}`);
+  return hit !== null;
+}
+
 type VerifyKey = Uint8Array | ReturnType<typeof createRemoteJWKSet>;
 
 async function tryVerify(token: string, key: VerifyKey): Promise<VerifyResult> {
@@ -73,6 +105,12 @@ async function tryVerify(token: string, key: VerifyKey): Promise<VerifyResult> {
 }
 
 export async function verifyAccess(token: string): Promise<VerifyResult> {
+  // Reject tokens revoked before expiry (e.g. via logout). Checked first so a
+  // stolen-but-logged-out token can't be used even while still cryptographically valid.
+  if (await isAccessRevoked(token)) {
+    return { ok: false, reason: 'invalid' };
+  }
+
   // 1. Supabase asymmetric tokens (ES256/RS256) via JWKS — the current default.
   const jwkSet = getSupabaseJwks();
   if (jwkSet) {
