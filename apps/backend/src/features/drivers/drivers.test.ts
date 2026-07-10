@@ -266,13 +266,46 @@ describe('Driver Profile', () => {
       return app.handle(req);
     };
 
-    let last = 200;
     for (let i = 0; i < 11; i++) {
       const res = await call();
-      last = res.status;
+      if (i < 10) {
+        expect(res.status).toBe(200);
+      } else {
+        expect(res.status).toBe(429);
+      }
+    }
+  });
+
+  test('/me routes are NOT throttled by the public profile rate limiter', async () => {
+    const { driverId, token } = await fullOnboarding(phone, password);
+    const ip = '203.0.113.99';
+
+    const publicCall = async () => {
+      const req = new Request(`http://localhost/api/drivers/${driverId}/profile`, {
+        method: 'GET',
+        headers: { 'x-forwarded-for': ip },
+      });
+      return app.handle(req);
+    };
+
+    const authCall = async () => {
+      const req = new Request('http://localhost/api/drivers/me', {
+        method: 'GET',
+        headers: { 'x-forwarded-for': ip, Authorization: `Bearer ${token}` },
+      });
+      return app.handle(req);
+    };
+
+    for (let i = 0; i < 10; i++) {
+      const res = await publicCall();
+      expect(res.status).toBe(200);
     }
 
-    expect(last).toBe(429);
+    const publicRes = await publicCall();
+    expect(publicRes.status).toBe(429);
+
+    const authRes = await authCall();
+    expect(authRes.status).toBe(200);
   });
 });
 

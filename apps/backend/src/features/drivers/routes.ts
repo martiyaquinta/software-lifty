@@ -20,24 +20,25 @@ const publicProfileRateLimit = rateLimit({
   windowMs: Number(process.env.PUBLIC_PROFILE_RATE_LIMIT_WINDOW_MS) || 60_000,
 }).as('scoped');
 
+const publicProfileRoutes = new Elysia().use(publicProfileRateLimit).get(
+  '/:id/profile',
+  ({ params: { id }, set }) => {
+    return safeCall(() => driversService.getPublicProfile(id), set);
+  },
+  {
+    params: driverIdParams,
+    detail: {
+      tags: ['drivers'],
+      summary: 'Perfil público del conductor',
+      description:
+        'Endpoint PÚBLICO (sin autenticación). Rate limit: 10 req/min por IP. Devuelve solo el primer nombre del conductor.',
+    },
+  },
+);
+
 export const driversRoutes = new Elysia({ prefix: '/drivers' })
   .use(authGuard)
-  .use(publicProfileRateLimit)
-  .get(
-    '/:id/profile',
-    ({ params: { id }, set }) => {
-      return safeCall(() => driversService.getPublicProfile(id), set);
-    },
-    {
-      params: driverIdParams,
-      detail: {
-        tags: ['drivers'],
-        summary: 'Perfil público del conductor',
-        description:
-          'Endpoint PÚBLICO (sin autenticación). Rate limit: 10 req/min por IP. Devuelve solo el primer nombre del conductor.',
-      },
-    },
-  )
+  .use(publicProfileRoutes)
   .get('/me', ({ user, set }) => safeCall(() => driversService.getMyProfile(user), set), {
     requireAuth: true,
   })
