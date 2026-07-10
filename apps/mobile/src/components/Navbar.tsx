@@ -1,5 +1,6 @@
 import type React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, type ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../theme';
 
 interface NavbarProps {
@@ -19,8 +20,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   rightElement,
   style,
 }) => {
+  const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.container, { backgroundColor }, style]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor,
+          paddingTop: insets.top,
+          height: theme.dimensions.navbarHeight + insets.top,
+        },
+        style,
+      ]}
+    >
       {showBack ? (
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <Text style={[styles.backText, { color: theme.colors.white }]}>←</Text>
