@@ -1,0 +1,6 @@
+creation_rules:
+  - path_regex: apps/(backend|mobile)/\.env(\.enc\.yml)?$
+    # Agregá acá la public key de tu compañera cuando la tengas
+    age:
+      - age1qr5j7n4wweajvc2hhepyapcczvhnv2x74n63qul7lw7a77d6zegs6sggpj
+      - age1dpm0ptg6n4yzq8ezxlzye2epttcv8uyazw67d85l525eg7y5g53s7rnyyf
