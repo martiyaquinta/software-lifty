@@ -134,6 +134,17 @@ describe('System', () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toContain('http_requests_total');
   });
+  test('security headers are applied on top-level and nested routes', async () => {
+    const top = await app.handle(new Request('http://localhost/health'));
+    expect(top.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(top.headers.get('X-Frame-Options')).toBe('DENY');
+
+    const nested = await app.handle(
+      new Request('http://localhost/api/drivers/00000000-0000-0000-0000-000000000000/profile'),
+    );
+    expect(nested.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(nested.headers.get('X-Frame-Options')).toBe('DENY');
+  });
 });
 
 // ── Auth ──
