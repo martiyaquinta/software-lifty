@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   overlay: {
-    ...(StyleSheet.absoluteFill as object),
+    ...StyleSheet.flatten(StyleSheet.absoluteFill),
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(13, 43, 69, 0.5)',
