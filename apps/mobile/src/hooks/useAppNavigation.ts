@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 
-const SCREEN_TO_ROUTE: Record<string, string> = {
+const SCREEN_TO_ROUTE = {
   Welcome: '/',
   Auth: '/auth',
   Register: '/register',
@@ -28,31 +28,42 @@ const SCREEN_TO_ROUTE: Record<string, string> = {
   Earnings: '/earnings',
   Profile: '/profile',
   PaymentMethod: '/payment-method',
-};
+} as const;
 
-type RouteParams = Record<string, string>;
+export type ScreenName = keyof typeof SCREEN_TO_ROUTE;
+
+export interface ScreenParams {
+  KYCWebView: { url: string };
+  UploadDocument: { docType: string; docLabel: string; mode?: string };
+  TripComplete: { amount?: string; commission?: string; driverEarnings?: string };
+}
 
 export function useAppNavigation() {
   const router = useRouter();
+
+  const push = (screen: string, params?: Record<string, string>) => {
+    const route = SCREEN_TO_ROUTE[screen as ScreenName];
+    if (!route) return;
+    if (params && Object.keys(params).length > 0) {
+      router.push({ pathname: route, params });
+    } else {
+      router.push(route);
+    }
+  };
+
+  const replace = (screen: string, params?: Record<string, string>) => {
+    const route = SCREEN_TO_ROUTE[screen as ScreenName];
+    if (!route) return;
+    if (params && Object.keys(params).length > 0) {
+      router.replace({ pathname: route, params });
+    } else {
+      router.replace(route);
+    }
+  };
+
   return {
-    navigate: (screen: string, params?: RouteParams) => {
-      const route = SCREEN_TO_ROUTE[screen];
-      if (!route) return;
-      if (params) {
-        router.push({ pathname: route as any, params });
-      } else {
-        router.push(route as any);
-      }
-    },
+    navigate: push,
     goBack: () => router.back(),
-    replace: (screen: string, params?: RouteParams) => {
-      const route = SCREEN_TO_ROUTE[screen];
-      if (!route) return;
-      if (params) {
-        router.replace({ pathname: route as any, params });
-      } else {
-        router.replace(route as any);
-      }
-    },
+    replace,
   };
 }

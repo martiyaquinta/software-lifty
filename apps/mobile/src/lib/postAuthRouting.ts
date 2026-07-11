@@ -1,12 +1,13 @@
 import { apiClient } from '../api/client';
 import type { DriverStatus } from '../api/types';
 import { driverStatusSchema } from '../api/types';
+import type { ScreenName } from '../hooks/useAppNavigation';
 import { useAuthStore } from '../store/authStore';
 
 type DriverStatusValue = DriverStatus['status'] | null;
 
 export interface StepRoute {
-  screen: string;
+  screen: ScreenName;
   storeStatus: DriverStatusValue;
 }
 
@@ -34,7 +35,7 @@ export const STEP_ROUTE: Record<string, StepRoute> = {
  * falling back to the KYC-aware `status` and finally the onboarding entry.
  */
 export function routeForDriverStatus(driverData: DriverStatus): {
-  screen: string;
+  screen: ScreenName | '';
   status: DriverStatusValue;
   blockedMessage?: string;
 } {
@@ -62,7 +63,7 @@ export function routeForDriverStatus(driverData: DriverStatus): {
 
 export interface PostAuthRoute {
   /** Target screen name (empty string when the account is blocked). */
-  screen: string;
+  screen: ScreenName | '';
   status: DriverStatusValue;
   /** Present when the account cannot proceed (rejected / suspended). */
   blockedMessage?: string;
