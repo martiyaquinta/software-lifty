@@ -12,3 +12,4 @@ web-build/
 .env
 .env.*
 !.env.example
+!.env.enc.yml
