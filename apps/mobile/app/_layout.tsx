@@ -2,13 +2,14 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { InteractionManager, StyleSheet, View } from 'react-native';
 import { apiClient } from '../src/api/client';
 import { driverStatusSchema } from '../src/api/types';
 import { AuthRedirectWatcher } from '../src/components/AuthRedirectWatcher';
 import { ConnectivityBanner } from '../src/components/feedback/ConnectivityBanner';
 import { ErrorBoundary } from '../src/components/feedback/ErrorBoundary';
+import { LoadingOverlay } from '../src/components/feedback/LoadingOverlay';
 import { AuthProvider } from '../src/context/AuthContext';
 import { useAppNavigation } from '../src/hooks/useAppNavigation';
 import {
@@ -66,41 +67,61 @@ function SessionRestore() {
 function ActiveTripRecovery() {
   const driverId = useAuthStore((s) => s.driverId);
   const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router;
+  const navigatedRef = useRef(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!driverId) return;
+    if (!driverId || navigatedRef.current) return;
+    let cancelled = false;
     const check = async () => {
+      setLoading(true);
       try {
         const response = await apiClient.get('/trips/active');
+        if (cancelled) return;
         const trip = response.data?.data ?? response.data;
         if (trip) {
           useTripStore.getState().setActiveTrip(trip.id, trip.status);
+          navigatedRef.current = true;
           InteractionManager.runAfterInteractions(() => {
+            if (cancelled) return;
             switch (trip.status) {
               case 'request_received':
-                router.replace('/incoming-request');
+                routerRef.current.replace('/incoming-request');
                 break;
               case 'accepted':
               case 'en_route':
-                router.replace('/navigation');
+                routerRef.current.replace('/navigation');
                 break;
               case 'waiting':
-                router.replace('/waiting-passenger');
+                routerRef.current.replace('/waiting-passenger');
                 break;
               case 'in_trip':
-                router.replace('/trip-in-progress');
+                routerRef.current.replace('/trip-in-progress');
                 break;
               default:
                 break;
             }
           });
         }
-      } catch {
-        // no active trip or API error — stay on current screen
+      } catch (err: any) {
+        console.log('[ActiveTripRecovery] /trips/active ERROR:', err?.message);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
     check();
-  }, [driverId, router]);
+    return () => {
+      cancelled = true;
+    };
+  }, [driverId]);
+
+  if (loading) {
+    return <LoadingOverlay visible />;
+  }
 
   return null;
 }
