@@ -1,13 +1,16 @@
 import { Elysia } from 'elysia';
 
-export const securityHeaders = new Elysia({ name: 'security-headers' }).onAfterHandle(({ set }) => {
-  set.headers['X-Content-Type-Options'] = 'nosniff';
-  set.headers['X-Frame-Options'] = 'DENY';
-  set.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin';
-  if (process.env.NODE_ENV === 'production') {
-    set.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
-  }
-});
+export const securityHeaders = new Elysia({ name: 'security-headers' }).onAfterHandle(
+  { as: 'scoped' },
+  ({ set }) => {
+    set.headers['X-Content-Type-Options'] = 'nosniff';
+    set.headers['X-Frame-Options'] = 'DENY';
+    set.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin';
+    if (process.env.NODE_ENV === 'production') {
+      set.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
+    }
+  },
+);
 
 export const cors = new Elysia({ name: 'cors' }).onRequest(({ request, set }) => {
   const origin = request.headers.get('origin') || '*';
