@@ -132,11 +132,13 @@ function NotificationSetup() {
   useEffect(() => {
     setupNotificationHandler();
 
-    registerForPush().then((token) => {
-      if (token) {
-        console.log('Expo push token:', token);
-      }
-    });
+    registerForPush()
+      .then((token) => {
+        if (token) {
+          console.log('Expo push token:', token);
+        }
+      })
+      .catch(() => {});
 
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       handleNotificationResponse(response, navigate);
