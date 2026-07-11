@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import type React from 'react';
@@ -221,13 +222,23 @@ export const OnboardingStep2Screen: React.FC = () => {
           return (
             <View key={doc.type} style={styles.uploadBlock}>
               <View style={styles.uploadIcon}>
-                <Text style={styles.uploadEmoji}>📄</Text>
+                <Ionicons
+                  name="document-text-outline"
+                  size={24}
+                  color={theme.colors.mediumGray}
+                  accessibilityLabel="Subir documento"
+                />
               </View>
               <Text style={styles.uploadTitle}>{doc.label}</Text>
 
               {state.uploaded ? (
                 <View style={styles.uploadedRow}>
-                  <Text style={styles.checkmark}>✅</Text>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={18}
+                    color={theme.colors.turquoise}
+                    accessibilityLabel="Documento subido"
+                  />
                   <Text style={styles.fileName} numberOfLines={1}>
                     {state.fileName}
                   </Text>
@@ -321,9 +332,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  uploadEmoji: {
-    fontSize: 24,
-  },
   uploadTitle: {
     fontSize: theme.fontSize.md,
     fontWeight: theme.fontWeight.medium,
@@ -350,9 +358,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
-  },
-  checkmark: {
-    fontSize: 18,
   },
   fileName: {
     fontSize: theme.fontSize.sm,

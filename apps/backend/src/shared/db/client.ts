@@ -6,18 +6,11 @@ import { logger } from '../lib/logger';
 let cachedPool: Pool | null = null;
 let cachedDb: NodePgDatabase | null = null;
 
-// Matches the postgres service in docker-compose.dev.yml (port 5433 so it
-// never clashes with a system Postgres on 5432). Production requires an
-// explicit DATABASE_URL — validateEnv() enforces it at boot.
-const DEV_DATABASE_URL = 'postgresql://lifty:lifty@localhost:5433/lifty';
-
-function getDatabaseUrl(): string | undefined {
-  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
-  if (process.env.NODE_ENV !== 'production') {
-    logger.info('[DB] DATABASE_URL not set — using dev default', { url: DEV_DATABASE_URL });
-    return DEV_DATABASE_URL;
+function getDatabaseUrl(): string {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL is required. Set it in your environment or .env file.');
   }
-  return undefined;
+  return process.env.DATABASE_URL;
 }
 
 export function getDb(): NodePgDatabase {
