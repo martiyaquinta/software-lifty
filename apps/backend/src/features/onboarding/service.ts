@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
 import { driverDocuments, drivers, vehicles } from '../../shared/db/schema';
 import { users } from '../../shared/db/schema';
@@ -217,10 +217,20 @@ export const onboardingService = {
 
     if (!doc) throw new AppError('Failed to upload document', 400, 'BAD_REQUEST');
 
-    await db
-      .update(drivers)
-      .set({ status: 'review', updated_at: new Date() })
-      .where(eq(drivers.id, driver.id));
+    const uploaded = await db
+      .select({ doc_type: driverDocuments.doc_type })
+      .from(driverDocuments)
+      .where(
+        and(eq(driverDocuments.driver_id, driver.id), ne(driverDocuments.status, 'superseded')),
+      );
+
+    const uploadedTypes = new Set(uploaded.map((d) => d.doc_type));
+    if (DOC_TYPES.every((t) => uploadedTypes.has(t))) {
+      await db
+        .update(drivers)
+        .set({ status: 'review', updated_at: new Date() })
+        .where(eq(drivers.id, driver.id));
+    }
 
     return { id: doc.id, doc_type: doc.doc_type, file_url: doc.file_url };
   },

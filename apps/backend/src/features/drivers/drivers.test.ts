@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
 import { driverDocuments, drivers, refreshTokens, users, vehicles } from '../../shared/db/schema';
+import { DOC_TYPES } from '../../shared/lib/documents';
 import { getRedis } from '../../shared/lib/redis';
 import { createTestToken } from '../../shared/testing/utils';
 
@@ -407,5 +408,76 @@ describe('Document re-upload', () => {
     const { status, data } = await reupload(token, 'background_check_front');
     expect(status).toBe(200);
     expect(data.requires_review).toBe(true);
+  });
+});
+
+describe('Document step completeness', () => {
+  const phone = '+5492619999999';
+  const password = 'testPass123';
+
+  test('status stays in documents step until all 8 doc types uploaded', async () => {
+    const { token, driverId } = await fullOnboarding(phone, password);
+    const seven = [
+      'license_front',
+      'license_back',
+      'registration_front',
+      'registration_back',
+      'insurance_front',
+      'insurance_back',
+      'background_check_front',
+    ];
+    await getDb().insert(driverDocuments).values(
+      seven.map((doc_type) => ({
+        driver_id: driverId,
+        doc_type,
+        file_url: 'https://x.com/f.png',
+      })),
+    );
+
+    const res = await app.handle(
+      new Request('http://localhost/api/drivers/me/status', {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    );
+    const data = await res.json();
+    expect(data.step).toBe('documents');
+  });
+
+  test('duplicate doc types do not complete the documents step', async () => {
+    const { token, driverId } = await fullOnboarding(phone, password);
+    await getDb().insert(driverDocuments).values(
+      Array.from({ length: 8 }, () => ({
+        driver_id: driverId,
+        doc_type: 'license_front',
+        file_url: 'https://x.com/f.png',
+      })),
+    );
+
+    const res = await app.handle(
+      new Request('http://localhost/api/drivers/me/status', {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    );
+    const data = await res.json();
+    expect(data.step).toBe('documents');
+  });
+
+  test('all 8 distinct doc types move driver to review', async () => {
+    const { token, driverId } = await fullOnboarding(phone, password);
+    await getDb().insert(driverDocuments).values(
+      DOC_TYPES.map((doc_type) => ({
+        driver_id: driverId,
+        doc_type,
+        file_url: 'https://x.com/f.png',
+      })),
+    );
+
+    const res = await app.handle(
+      new Request('http://localhost/api/drivers/me/status', {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    );
+    const data = await res.json();
+    expect(data.step).toBe('review');
   });
 });

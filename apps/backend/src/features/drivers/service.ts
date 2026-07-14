@@ -15,8 +15,10 @@ const VALID_DOC_TYPES: readonly string[] = DOC_TYPES;
 // mislabelling a doc_type.
 const SENSITIVE_DOC_TYPES = new Set<string>(DOC_TYPES);
 
-// Documents required to finish onboarding (licencia, cedula, seguro).
-const REQUIRED_DOCUMENT_COUNT = 3;
+function hasAllRequiredDocs(uploaded: { doc_type: string }[]): boolean {
+  const types = new Set(uploaded.map((d) => d.doc_type));
+  return DOC_TYPES.every((t) => types.has(t));
+}
 
 export const driversService = {
   async getPublicProfile(driverId: string) {
@@ -124,13 +126,13 @@ export const driversService = {
 
     // Vehicle done — documents required next.
     const docsList = await db
-      .select({ id: driverDocuments.id })
+      .select({ doc_type: driverDocuments.doc_type })
       .from(driverDocuments)
       .where(
         and(eq(driverDocuments.driver_id, driver.id), ne(driverDocuments.status, 'superseded')),
       );
 
-    if (docsList.length < REQUIRED_DOCUMENT_COUNT) {
+    if (!hasAllRequiredDocs(docsList)) {
       return { status: 'pending', step: 'documents', kyc_status: 'approved' };
     }
 
@@ -317,7 +319,7 @@ export const driversService = {
     });
 
     const docsList = await db
-      .select({ id: driverDocuments.id })
+      .select({ doc_type: driverDocuments.doc_type })
       .from(driverDocuments)
       .where(
         and(eq(driverDocuments.driver_id, driver.id), ne(driverDocuments.status, 'superseded')),
@@ -325,7 +327,7 @@ export const driversService = {
 
     // All required docs submitted → hand the driver to the admin review queue
     // (adminService.listPending filters by status = 'review').
-    if (docsList.length >= REQUIRED_DOCUMENT_COUNT && driver.status !== 'approved') {
+    if (hasAllRequiredDocs(docsList) && driver.status !== 'approved') {
       await db
         .update(drivers)
         .set({ status: 'review', admin_review_status: 'pending', updated_at: new Date() })
