@@ -3,20 +3,11 @@ import { db } from '../../shared/db/client';
 import { driverDocuments, drivers, vehicles } from '../../shared/db/schema';
 import { users } from '../../shared/db/schema';
 import { createSession } from '../../shared/lib/didit';
+import { DOC_TYPES } from '../../shared/lib/documents';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
 import { uploadFile } from '../../shared/lib/storage';
 import type { AuthUser } from '../../shared/middleware/auth';
-
-const VALID_DOC_TYPES = [
-  'license',
-  'registration',
-  'insurance',
-  'background_check',
-  'drivers_license',
-  'vehicle_registration',
-  'vehicle_insurance',
-];
 
 async function getOrThrow(user: AuthUser) {
   const [driver] = await db.select().from(drivers).where(eq(drivers.user_id, user.id)).limit(1);
@@ -156,7 +147,7 @@ export const onboardingService = {
     }
 
     for (const d of docs) {
-      if (!VALID_DOC_TYPES.includes(d.doc_type)) {
+      if (!(DOC_TYPES as readonly string[]).includes(d.doc_type)) {
         throw new AppError(`Invalid doc_type: ${d.doc_type}`, 400, 'BAD_REQUEST');
       }
     }
@@ -202,7 +193,7 @@ export const onboardingService = {
       );
     }
 
-    if (!VALID_DOC_TYPES.includes(docType)) {
+    if (!(DOC_TYPES as readonly string[]).includes(docType)) {
       throw new AppError(`Invalid doc_type: ${docType}`, 400, 'BAD_REQUEST');
     }
 

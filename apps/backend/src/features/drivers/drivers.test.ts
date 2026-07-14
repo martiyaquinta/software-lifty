@@ -331,7 +331,7 @@ describe('Document re-upload', () => {
     const db = getDb();
     await db.update(drivers).set({ is_online: true, status: 'approved' }).where(eq(drivers.id, driverId));
 
-    const { status, data } = await reupload(token, 'license');
+    const { status, data } = await reupload(token, 'license_front');
     expect(status).toBe(200);
     expect(data.status).toBe('pending_review');
     expect(data.requires_review).toBe(true);
@@ -345,7 +345,7 @@ describe('Document re-upload', () => {
 
   test('cannot go online while documents pending review', async () => {
     const { token, driverId } = await fullOnboarding(phone, password);
-    await reupload(token, 'license');
+    await reupload(token, 'license_front');
 
     const { status, data } = await request(
       'PUT',
@@ -362,9 +362,9 @@ describe('Document re-upload', () => {
     const db = getDb();
     await db
       .insert(driverDocuments)
-      .values({ driver_id: driverId, doc_type: 'license', file_url: 'https://x.com/old.png', status: 'approved' });
+      .values({ driver_id: driverId, doc_type: 'license_front', file_url: 'https://x.com/old.png', status: 'approved' });
 
-    await reupload(token, 'license');
+    await reupload(token, 'license_front');
 
     const all = await db.select().from(driverDocuments).where(eq(driverDocuments.driver_id, driverId));
     const superseded = all.filter((d) => d.status === 'superseded');
@@ -378,7 +378,7 @@ describe('Document re-upload', () => {
 
   test('admin approval clears pending flag and approves docs', async () => {
     const { token, driverId } = await fullOnboarding(phone, password);
-    await reupload(token, 'license');
+    await reupload(token, 'license_front');
 
     const db = getDb();
     const [admin] = await db
@@ -404,7 +404,7 @@ describe('Document re-upload', () => {
 
   test('background_check re-upload also requires review', async () => {
     const { token } = await fullOnboarding(phone, password);
-    const { status, data } = await reupload(token, 'background_check');
+    const { status, data } = await reupload(token, 'background_check_front');
     expect(status).toBe(200);
     expect(data.requires_review).toBe(true);
   });

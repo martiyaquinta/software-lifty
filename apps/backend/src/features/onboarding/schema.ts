@@ -1,14 +1,5 @@
 import { t } from 'elysia';
-
-const validDocTypes = [
-  'license',
-  'registration',
-  'insurance',
-  'background_check',
-  'drivers_license',
-  'vehicle_registration',
-  'vehicle_insurance',
-] as const;
+import { DOC_TYPES } from '../../shared/lib/documents';
 
 export const step1Body = t.Object({
   full_name: t.String({ minLength: 2, maxLength: 255 }),
@@ -26,7 +17,7 @@ export const step2Body = t.Object({
 export const step3Body = t.Object({
   documents: t.Array(
     t.Object({
-      doc_type: t.String({ enum: validDocTypes }),
+      doc_type: t.String({ enum: DOC_TYPES }),
       file_url: t.String({ minLength: 1, maxLength: 512 }),
     }),
     { minItems: 1 },
@@ -35,5 +26,5 @@ export const step3Body = t.Object({
 
 export const uploadDocBody = t.Object({
   file: t.File({ maxSize: 10 * 1024 * 1024 }),
-  doc_type: t.String({ enum: validDocTypes }),
+  doc_type: t.String({ enum: DOC_TYPES }),
 });

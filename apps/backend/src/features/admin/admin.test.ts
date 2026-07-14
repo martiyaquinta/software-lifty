@@ -64,8 +64,8 @@ async function createReviewDriver(): Promise<{ token: string; driverId: string }
 
   await request('POST', '/api/onboarding/step3', {
     documents: [
-      { doc_type: 'license', file_url: 'https://example.com/license.pdf' },
-      { doc_type: 'insurance', file_url: 'https://example.com/insurance.pdf' },
+      { doc_type: 'license_front', file_url: 'https://example.com/license.pdf' },
+      { doc_type: 'insurance_front', file_url: 'https://example.com/insurance.pdf' },
     ],
   }, token);
 
