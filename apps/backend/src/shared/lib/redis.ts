@@ -8,6 +8,7 @@ export function getRedis(): Redis | null {
   if (!REDIS_URL) return null;
   if (!redis) {
     const instance = new Redis(REDIS_URL, {
+      connectTimeout: 3000,
       maxRetriesPerRequest: 3,
       retryStrategy(times) {
         if (times > 3) return null;
