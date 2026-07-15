@@ -174,9 +174,23 @@ export function createApp() {
       return registry.getPrometheusText();
     });
 
-  app.onError(({ code, error, set }) => {
-    const msg = (error as Error)?.message ?? 'Unknown error';
-    const reqId = (set.headers['X-Request-ID'] as string) || 'unknown';
+  app.onError(({ code, error, set, request }) => {
+    const e = error as Error;
+    const msg = e?.message ?? 'Unknown error';
+    const status = set.status ?? 500;
+    const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+    const url = request ? new URL(request.url) : null;
+
+    logger.error(
+      `[ERROR] ${code ?? 'UNKNOWN'} ${request?.method ?? '?'} ${url?.pathname ?? '?'} → ${msg}`,
+      {
+        code: code ?? 'UNKNOWN',
+        status,
+        method: request?.method ?? '?',
+        path: url?.pathname ?? '?',
+        ...(isDev && e?.stack ? { stack: e.stack } : {}),
+      },
+    );
 
     switch (code) {
       case 'NOT_FOUND':
@@ -192,15 +206,12 @@ export function createApp() {
           meta: { timestamp: new Date().toISOString() },
         };
       default:
-        set.status = 500;
+        set.status = status;
         return {
           error: {
             code: 'INTERNAL_ERROR',
-            message:
-              process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test'
-                ? msg
-                : 'Something went wrong',
-            status: 500,
+            message: isDev ? msg : 'Something went wrong',
+            status,
           },
           meta: { timestamp: new Date().toISOString() },
         };
