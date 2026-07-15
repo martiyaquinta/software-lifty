@@ -13,3 +13,14 @@ export async function createTestToken(userId: string, role = 'driver'): Promise<
     .setIssuedAt()
     .sign(secret);
 }
+
+export async function safeResJson(res: Response): Promise<unknown> {
+  if (res.status === 204) return null;
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
