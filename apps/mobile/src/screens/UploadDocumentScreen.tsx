@@ -345,11 +345,6 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.md,
     color: theme.colors.deepBlue,
   },
-  uploadSection: {
-    width: 343,
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.sm,
-  },
   button: {
     width: 343,
   },
