@@ -3,6 +3,7 @@ import { db } from '../../shared/db/client';
 import { driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
 import type { AuthUser } from '../../shared/middleware/auth';
+import { notifyDriverApproved, notifyDriverRejected } from './notifications';
 
 export const adminService = {
   async listPending() {
@@ -121,6 +122,23 @@ export const adminService = {
       .where(
         and(eq(driverDocuments.driver_id, driverId), eq(driverDocuments.status, 'pending_review')),
       );
+
+    {
+      const [driverUser] = await db
+        .select({ email: users.email, full_name: users.full_name })
+        .from(users)
+        .innerJoin(drivers, eq(drivers.user_id, users.id))
+        .where(eq(drivers.id, driverId))
+        .limit(1);
+
+      if (driverUser?.email) {
+        if (action === 'approve') {
+          notifyDriverApproved(driverUser.email, driverUser.full_name ?? 'Driver');
+        } else {
+          notifyDriverRejected(driverUser.email, driverUser.full_name ?? 'Driver', notes);
+        }
+      }
+    }
 
     return {
       driver_id: driver.id,
