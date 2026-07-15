@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
 import { getDb, resetDb } from '../../shared/db/client';
-import { refreshTokens, users } from '../../shared/db/schema';
+import { users } from '../../shared/db/schema';
 
 let db: ReturnType<typeof getDb>;
 
@@ -10,12 +10,10 @@ beforeAll(() => {
 });
 
 beforeEach(async () => {
-  await db.delete(refreshTokens);
   await db.delete(users);
 });
 
 afterAll(async () => {
-  await db.delete(refreshTokens);
   await db.delete(users);
   resetDb();
 });
@@ -33,7 +31,7 @@ describe('Race Conditions — Concurrent DB Operations', () => {
         .values({
           id,
           phone: `${phone}${i}`,
-          password_hash: 'hash12345678901234567890',
+        
           role: 'driver',
         })
         .returning(),
@@ -49,7 +47,7 @@ describe('Race Conditions — Concurrent DB Operations', () => {
     await db.insert(users).values({
       id,
       phone: '+5492611000000',
-      password_hash: 'hash12345678901234567890',
+    
       role: 'driver',
     });
 

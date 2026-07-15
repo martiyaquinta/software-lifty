@@ -1,6 +1,5 @@
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
-process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
@@ -8,7 +7,6 @@ import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
 import {
   drivers,
-  refreshTokens,
   sosEvents,
   tripEvents,
   trips,
@@ -24,7 +22,6 @@ async function truncateTables() {
   await db.delete(tripEvents);
   await db.delete(trips);
   await db.delete(drivers);
-  await db.delete(refreshTokens);
   await db.delete(users);
 }
 
@@ -45,9 +42,9 @@ async function registerAndGetToken(phone: string, _password: string): Promise<st
   const db = getDb();
   const [user] = await db
     .insert(users)
-    .values({ phone, full_name: 'Test Driver', role: 'driver', password_hash: 'unused' })
+    .values({ phone, full_name: 'Test Driver', role: 'driver' })
     .returning({ id: users.id });
-  return createTestToken(user.id, 'driver');
+  return createTestToken(user.id);
 }
 
 async function createDriverRow(token: string): Promise<string> {

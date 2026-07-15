@@ -27,12 +27,10 @@ import { requestId } from './shared/middleware/request-id';
 import { cors, securityHeaders } from './shared/middleware/security';
 
 function validateEnv() {
-  const required = ['JWT_SECRET', 'DATABASE_URL', 'RESEND_API_KEY'];
+  const required = ['SUPABASE_URL', 'DATABASE_URL', 'RESEND_API_KEY'];
   for (const key of required) {
     if (!process.env[key]) throw new Error(`Missing required env var: ${key}`);
   }
-  if ((process.env.JWT_SECRET?.length ?? 0) < 32)
-    throw new Error('JWT_SECRET must be at least 32 characters');
   const port = process.env.PORT;
   if (port !== undefined && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)) {
     throw new Error('PORT must be a valid port number (1-65535)');
@@ -57,7 +55,7 @@ export function createApp() {
             description: 'Driver-Side MVP — Lifty backend. 49 endpoints, 15 DB tables, 111 tests.',
           },
           tags: [
-            { name: 'auth', description: 'Autenticación, registro, login, JWT' },
+            { name: 'auth', description: 'Perfil y logout (auth via Supabase)' },
             { name: 'onboarding', description: 'Onboarding del conductor (5 pasos)' },
             { name: 'kyc', description: 'Verificación de identidad DIDIT' },
             { name: 'trips', description: 'State machine de viajes' },
@@ -174,9 +172,23 @@ export function createApp() {
       return registry.getPrometheusText();
     });
 
-  app.onError(({ code, error, set }) => {
-    const msg = (error as Error)?.message ?? 'Unknown error';
-    const reqId = (set.headers['X-Request-ID'] as string) || 'unknown';
+  app.onError(({ code, error, set, request }) => {
+    const e = error as Error;
+    const msg = e?.message ?? 'Unknown error';
+    const status = set.status ?? 500;
+    const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+    const url = request ? new URL(request.url) : null;
+
+    logger.error(
+      `[ERROR] ${code ?? 'UNKNOWN'} ${request?.method ?? '?'} ${url?.pathname ?? '?'} → ${msg}`,
+      {
+        code: code ?? 'UNKNOWN',
+        status,
+        method: request?.method ?? '?',
+        path: url?.pathname ?? '?',
+        ...(isDev && e?.stack ? { stack: e.stack } : {}),
+      },
+    );
 
     switch (code) {
       case 'NOT_FOUND':
@@ -192,15 +204,12 @@ export function createApp() {
           meta: { timestamp: new Date().toISOString() },
         };
       default:
-        set.status = 500;
+        set.status = status;
         return {
           error: {
             code: 'INTERNAL_ERROR',
-            message:
-              process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test'
-                ? msg
-                : 'Something went wrong',
-            status: 500,
+            message: isDev ? msg : 'Something went wrong',
+            status,
           },
           meta: { timestamp: new Date().toISOString() },
         };

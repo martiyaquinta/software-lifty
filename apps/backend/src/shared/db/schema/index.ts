@@ -1,5 +1,4 @@
 export { users } from './users';
-export { refreshTokens } from './refresh-tokens';
 export { drivers } from './drivers';
 export { vehicles } from './vehicles';
 export { driverDocuments } from './driver-documents';

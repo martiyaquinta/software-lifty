@@ -1,11 +1,10 @@
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
-process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
-import { drivers, payoutMethods, refreshTokens, users } from '../../shared/db/schema';
+import { drivers, payoutMethods, users } from '../../shared/db/schema';
 import { createTestToken } from '../../shared/testing/utils';
 
 let app: any;
@@ -14,7 +13,6 @@ async function truncateTables() {
   const db = getDb();
   await db.delete(payoutMethods);
   await db.delete(drivers);
-  await db.delete(refreshTokens);
   await db.delete(users);
 }
 
@@ -36,9 +34,9 @@ async function registerAndGetToken(): Promise<{ token: string; userId: string }>
   const db = getDb();
   const [user] = await db
     .insert(users)
-    .values({ phone, full_name: 'Test Driver', role: 'driver', password_hash: 'unused' })
+    .values({ phone, full_name: 'Test Driver', role: 'driver' })
     .returning({ id: users.id });
-  return { token: await createTestToken(user.id, 'driver'), userId: user.id };
+  return { token: await createTestToken(user.id), userId: user.id };
 }
 
 async function createDriverRow(userId: string): Promise<string> {

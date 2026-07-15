@@ -57,22 +57,26 @@ export function rateLimit(config?: Partial<RateLimitConfig>) {
       const key = `${keyPrefix}:${ip}`;
       const windowSeconds = Math.ceil(windowMs / 1000);
 
-      const count = await redis.incr(key);
-      if (count === 1) {
-        await redis.expire(key, windowSeconds);
-      }
+      try {
+        const count = await redis.incr(key);
+        if (count === 1) {
+          await redis.expire(key, windowSeconds);
+        }
 
-      const ttl = await redis.ttl(key);
-      const remaining = Math.max(0, max - count);
-      const resetAt = Math.floor(Date.now() / 1000) + (ttl > 0 ? ttl : windowSeconds);
+        const ttl = await redis.ttl(key);
+        const remaining = Math.max(0, max - count);
+        const resetAt = Math.floor(Date.now() / 1000) + (ttl > 0 ? ttl : windowSeconds);
 
-      set.headers['X-RateLimit-Limit'] = String(max);
-      set.headers['X-RateLimit-Remaining'] = String(remaining);
-      set.headers['X-RateLimit-Reset'] = String(resetAt);
+        set.headers['X-RateLimit-Limit'] = String(max);
+        set.headers['X-RateLimit-Remaining'] = String(remaining);
+        set.headers['X-RateLimit-Reset'] = String(resetAt);
 
-      if (count > max) {
-        set.status = 429;
-        return { error: 'Too Many Requests', message: 'Rate limit exceeded' };
+        if (count > max) {
+          set.status = 429;
+          return { error: 'Too Many Requests', message: 'Rate limit exceeded' };
+        }
+      } catch {
+        // Redis unavailable — allow the request through without rate limiting
       }
     })
     .as('scoped');

@@ -1,7 +1,6 @@
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
-process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
 import { beforeEach } from 'bun:test';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';

@@ -1,12 +1,11 @@
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
-process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
-import { driverDocuments, drivers, refreshTokens, users, vehicles } from '../../shared/db/schema';
+import { driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
 import { DOC_TYPES } from '../../shared/lib/documents';
 import { getRedis } from '../../shared/lib/redis';
 import { createTestToken } from '../../shared/testing/utils';
@@ -18,7 +17,6 @@ async function truncateTables() {
   await db.delete(driverDocuments);
   await db.delete(vehicles);
   await db.delete(drivers);
-  await db.delete(refreshTokens);
   await db.delete(users);
 }
 
@@ -39,9 +37,9 @@ async function registerAndGetToken(phone: string, _password: string): Promise<{ 
   const db = getDb();
   const [user] = await db
     .insert(users)
-    .values({ phone, full_name: 'Juan Perez', role: 'driver', password_hash: 'unused' })
+    .values({ phone, full_name: 'Juan Perez', role: 'driver' })
     .returning({ id: users.id });
-  return { token: await createTestToken(user.id, 'driver'), userId: user.id };
+  return { token: await createTestToken(user.id), userId: user.id };
 }
 
 async function fullOnboarding(phone: string, password: string) {
@@ -384,9 +382,9 @@ describe('Document re-upload', () => {
     const db = getDb();
     const [admin] = await db
       .insert(users)
-      .values({ phone: '+5492610000001', role: 'admin', password_hash: 'h' })
+      .values({ phone: '+5492610000001', role: 'admin' })
       .returning({ id: users.id });
-    const adminToken = await createTestToken(admin.id, 'admin');
+    const adminToken = await createTestToken(admin.id);
 
     const { status } = await request(
       'POST',

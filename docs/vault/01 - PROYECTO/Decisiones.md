@@ -8,7 +8,7 @@
 | Framework Backend | Elysia JS | Type-safe, ergonomía Fastify-like |
 | Arquitectura | Feature-oriented | Cada feature = routes + service + handler + schema + tests |
 | ORM | Drizzle ORM | Declarativo, type-safe, SQL-like |
-| Auth | JWT propio (migrando a Supabase Auth) | Eliminar dualidad frontend/backend |
+| Auth | Supabase Auth SDK | Verificación via `supabase.auth.getUser()`, sin JWT propio |
 | WebSocket | Elysia WS + `Bun.serve` | Ubicación en tiempo real, chat |
 | Validación | TypeBox (nativo en Elysia) | Schemas compartibles con frontend |
 | Pagos | Mercado Pago API | Webhook + split 80/20 + withdrawal a CVU |
@@ -24,4 +24,3 @@
 1. **Backend test script**: `"test": "echo \"Error: no test specified\""` — arreglar
 2. **Frontend test script**: Jest instalado pero sin script `test`
 3. **Shared tsconfig**: `tsconfig.base.json` en root
-4. **Auth migration**: Completar migración a Supabase Auth como single source of truth

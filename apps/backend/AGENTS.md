@@ -4,7 +4,7 @@
 - **Bun** runtime, **Elysia** HTTP framework, **Drizzle ORM** + **PostgreSQL** (Supabase)
 - **Supabase** para DB hosting y Storage (documentos de conductores)
 - **Resend** para emails transaccionales (verificacion de cuenta)
-- Auth: JWT propio (`jose`), `Bun.password` para hashing, refresh tokens en DB
+- Auth: Supabase Auth SDK (`supabase.auth.getUser()` para verificacion, sin JWT propio)
 - Redis (ioredis) para rate limiting y cache de ubicacion
 
 ## Commands
@@ -14,13 +14,11 @@ bun test             # correr tests (194 tests, 17 suites)
 ```
 
 ## Auth
-- `POST /auth/register` → crea usuario (unverified), envia codigo de 6 digitos por Resend
-- `POST /auth/verify` → verifica email con codigo
-- `POST /auth/login` → devuelve JWT (access 15min + refresh 30d)
-- `POST /auth/refresh` → rota refresh token
-- `GET /auth/me` → datos del usuario autenticado
-- `POST /auth/logout` → revoca todos los refresh tokens
-- Variables requeridas: `JWT_SECRET` (min 32 chars), `RESEND_API_KEY`, `DATABASE_URL`
+- Auth via Supabase Auth. El backend verifica tokens con `supabase.auth.getUser()`.
+- `GET /auth/me` → datos del usuario autenticado (desde DB local)
+- `POST /auth/logout` → cierre de sesion (no-op, Supabase maneja la sesion)
+- El authPlugin auto-crea la fila en `users` cuando un `sub` nuevo toca el backend por primera vez.
+- Variables requeridas: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `DATABASE_URL`, `RESEND_API_KEY`
 
 ## Endpoints públicos
 

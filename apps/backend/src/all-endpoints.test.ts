@@ -5,14 +5,12 @@
  */
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
-process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
-import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
 import { createApp } from './index';
 import { getDb, resetDb } from './shared/db/client';
 import { users } from './shared/db/schema';
-import { logger } from './shared/lib/logger';
 import { getRedis } from './shared/lib/redis';
 import { createTestToken } from './shared/testing/utils';
 
@@ -31,7 +29,6 @@ async function truncateAll() {
   await db.execute('DELETE FROM withdrawals');
   await db.execute('DELETE FROM payout_methods');
   await db.execute('DELETE FROM drivers');
-  await db.execute('DELETE FROM refresh_tokens');
   await db.execute('DELETE FROM users');
 
   // Clear rate-limit Redis keys so per-IP counters reset between tests
@@ -79,9 +76,9 @@ async function register(
   const db = getDb();
   const [user] = await db
     .insert(users)
-    .values({ phone, full_name: fullName, role: 'driver', password_hash: 'unused' })
+    .values({ phone, full_name: fullName, role: 'driver' })
     .returning({ id: users.id });
-  return createTestToken(user.id, 'driver');
+  return createTestToken(user.id);
 }
 
 async function registerWithUser(
@@ -92,9 +89,9 @@ async function registerWithUser(
   const db = getDb();
   const [user] = await db
     .insert(users)
-    .values({ phone, full_name: fullName, role: 'driver', password_hash: 'unused' })
+    .values({ phone, full_name: fullName, role: 'driver' })
     .returning({ id: users.id });
-  return { token: await createTestToken(user.id, 'driver'), userId: user.id };
+  return { token: await createTestToken(user.id), userId: user.id };
 }
 
 async function driver(token: string): Promise<string> {
@@ -162,148 +159,6 @@ describe('Auth', () => {
     expect(status).toBe(401);
   });
 
-  test('register → resend → verify → login → forgot → reset full flow', async () => {
-    const db = getDb();
-    const email = 'Flow.Test@Example.COM'; // mixed case on purpose
-    const emailLower = email.toLowerCase();
-
-    // register normalizes email to lowercase
-    const reg = await req('POST', '/api/auth/register', { email, password: pw });
-    expect(reg.status).toBe(200);
-    const [created] = await db
-      .select({ code: users.verification_code })
-      .from(users)
-      .where(eq(users.email, emailLower));
-    expect(created.code).toHaveLength(6);
-    const wrongCode = created.code === '000000' ? '111111' : '000000';
-
-    // resend immediately after register hits the cooldown
-    expect((await req('POST', '/api/auth/resend-code', { email })).status).toBe(429);
-    // resend for an unknown email leaks nothing
-    expect((await req('POST', '/api/auth/resend-code', { email: 'nobody@x.com' })).status).toBe(
-      200,
-    );
-
-    // wrong code rejected, right code (any casing) accepted
-    expect((await req('POST', '/api/auth/verify', { email, code: wrongCode })).status).toBe(400);
-    const verify = await req('POST', '/api/auth/verify', {
-      email: email.toUpperCase(),
-      code: created.code,
-    });
-    expect(verify.status).toBe(200);
-
-    // login with the original mixed-case email
-    const login = await req('POST', '/api/auth/login', { email, password: pw });
-    expect(login.status).toBe(200);
-    expect(login.data.access_token).toBeTruthy();
-    const oldRefresh = login.data.refresh_token;
-
-    // forgot → reset password
-    expect((await req('POST', '/api/auth/forgot-password', { email })).status).toBe(200);
-    expect(
-      (await req('POST', '/api/auth/forgot-password', { email: 'nobody@x.com' })).status,
-    ).toBe(200);
-    const [withReset] = await db
-      .select({ code: users.reset_code })
-      .from(users)
-      .where(eq(users.email, emailLower));
-    expect(withReset.code).toHaveLength(6);
-    const wrongReset = withReset.code === '000000' ? '111111' : '000000';
-    expect(
-      (
-        await req('POST', '/api/auth/reset-password', {
-          email,
-          code: wrongReset,
-          password: 'newPass123',
-        })
-      ).status,
-    ).toBe(400);
-    expect(
-      (
-        await req('POST', '/api/auth/reset-password', {
-          email,
-          code: withReset.code,
-          password: 'newPass123',
-        })
-      ).status,
-    ).toBe(200);
-
-    // old password dead, new one works, pre-reset session revoked
-    expect((await req('POST', '/api/auth/login', { email, password: pw })).status).toBe(401);
-    expect(
-      (await req('POST', '/api/auth/login', { email, password: 'newPass123' })).status,
-    ).toBe(200);
-    expect(
-      (await req('POST', '/api/auth/refresh', { refresh_token: oldRefresh })).status,
-    ).toBe(401);
-  });
-
-  test('verify locks after 5 wrong attempts', async () => {
-    const db = getDb();
-    const email = 'lock.test@example.com';
-    await req('POST', '/api/auth/register', { email, password: pw });
-    const [created] = await db
-      .select({ code: users.verification_code })
-      .from(users)
-      .where(eq(users.email, email));
-    const wrongCode = created.code === '000000' ? '111111' : '000000';
-
-    const warnSpy = spyOn(logger, 'warn');
-    try {
-      for (let i = 0; i < 5; i++) {
-        await req('POST', '/api/auth/verify', { email, code: wrongCode });
-      }
-      // even the right code is rejected now
-      const locked = await req('POST', '/api/auth/verify', { email, code: created.code });
-      expect(locked.status).toBe(400);
-      expect(locked.data.error.message).toContain('Demasiados');
-      // the lockout must be logged so it can be alerted on
-      expect(warnSpy.mock.calls.some((c) => String(c[0]).toLowerCase().includes('locked'))).toBe(
-        true,
-      );
-    } finally {
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('reset-password locks after 5 wrong attempts and logs lockout', async () => {
-    const db = getDb();
-    const email = 'reset.lock@example.com';
-    await req('POST', '/api/auth/register', { email, password: pw });
-    // issue a reset code (no cooldown right after register)
-    expect((await req('POST', '/api/auth/forgot-password', { email })).status).toBe(200);
-    const [row] = await db
-      .select({ code: users.reset_code })
-      .from(users)
-      .where(eq(users.email, email));
-    expect(row.code).toHaveLength(6);
-    const wrongCode = row.code === '000000' ? '111111' : '000000';
-
-    const warnSpy = spyOn(logger, 'warn');
-    try {
-      for (let i = 0; i < 5; i++) {
-        await req('POST', '/api/auth/reset-password', {
-          email,
-          code: wrongCode,
-          password: 'newPass123',
-        });
-      }
-      // even the right code is rejected now
-      const locked = await req('POST', '/api/auth/reset-password', {
-        email,
-        code: row.code,
-        password: 'newPass123',
-      });
-      expect(locked.status).toBe(400);
-      expect(locked.data.error.message).toContain('Demasiados');
-      // the lockout must be logged so it can be alerted on
-      expect(warnSpy.mock.calls.some((c) => String(c[0]).toLowerCase().includes('locked'))).toBe(
-        true,
-      );
-    } finally {
-      warnSpy.mockRestore();
-    }
-  });
 });
 
 // ── Onboarding ──
