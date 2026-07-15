@@ -7,6 +7,7 @@ import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
 import { uploadFile } from '../../shared/lib/storage';
 import type { AuthUser } from '../../shared/middleware/auth';
+import { notifyAdminsNewDocuments } from '../admin/notifications';
 
 const VALID_DOC_TYPES = [
   'license',
@@ -183,6 +184,15 @@ export const onboardingService = {
       .set({ status: 'review', updated_at: new Date() })
       .where(eq(drivers.id, driver.id));
 
+    {
+      const [userRow] = await db
+        .select({ full_name: users.full_name })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1);
+      notifyAdminsNewDocuments(userRow?.full_name ?? 'Driver', driver.id);
+    }
+
     return {
       documents: created,
       status: 'review',
@@ -230,6 +240,15 @@ export const onboardingService = {
       .update(drivers)
       .set({ status: 'review', updated_at: new Date() })
       .where(eq(drivers.id, driver.id));
+
+    {
+      const [userRow] = await db
+        .select({ full_name: users.full_name })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1);
+      notifyAdminsNewDocuments(userRow?.full_name ?? 'Driver', driver.id);
+    }
 
     return { id: doc.id, doc_type: doc.doc_type, file_url: doc.file_url };
   },
