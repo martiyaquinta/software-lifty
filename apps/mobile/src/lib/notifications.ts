@@ -20,10 +20,15 @@ export function setupNotificationHandler(): void {
 }
 
 export async function registerForPush(): Promise<string | null> {
+  const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.expoConfig?.slug;
+
+  if (!projectId) {
+    return null;
+  }
+
   try {
     const perm = (await Notifications.requestPermissionsAsync()) as unknown as PermStatus;
     if (perm.status !== 'granted') {
-      console.warn('Push notification permissions denied');
       return null;
     }
 
@@ -35,12 +40,9 @@ export async function registerForPush(): Promise<string | null> {
       });
     }
 
-    const token = await Notifications.getExpoPushTokenAsync({
-      projectId: Constants.expoConfig?.extra?.eas?.projectId ?? Constants.expoConfig?.slug,
-    });
+    const token = await Notifications.getExpoPushTokenAsync({ projectId });
     return token.data;
-  } catch (error) {
-    console.error('registerForPush failed:', error);
+  } catch {
     return null;
   }
 }
