@@ -142,7 +142,11 @@ export const driversService = {
       .select({ id: driverDocuments.id })
       .from(driverDocuments)
       .where(
-        and(eq(driverDocuments.driver_id, driver.id), ne(driverDocuments.status, 'superseded')),
+        and(
+          eq(driverDocuments.driver_id, driver.id),
+          ne(driverDocuments.status, 'superseded'),
+          ne(driverDocuments.status, 'rejected'),
+        ),
       );
 
     if (docsList.length < REQUIRED_DOCUMENT_COUNT) {
@@ -335,7 +339,11 @@ export const driversService = {
       .select({ id: driverDocuments.id })
       .from(driverDocuments)
       .where(
-        and(eq(driverDocuments.driver_id, driver.id), ne(driverDocuments.status, 'superseded')),
+        and(
+          eq(driverDocuments.driver_id, driver.id),
+          ne(driverDocuments.status, 'superseded'),
+          ne(driverDocuments.status, 'rejected'),
+        ),
       );
 
     // All required docs submitted → hand the driver to the admin review queue
