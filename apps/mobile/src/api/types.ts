@@ -69,6 +69,7 @@ export const driverStatusSchema = z.object({
     .optional(),
   kyc_status: z.string().optional(),
   documents_pending_review: z.boolean().optional(),
+  admin_review_notes: z.string().nullable().optional(),
 });
 
 export const tripStatusSchema = z.enum([
