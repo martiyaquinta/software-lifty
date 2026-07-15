@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { BackHandler, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Animated, BackHandler, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { apiClient, getValidated } from '../api/client';
 import { driverStatusSchema } from '../api/types';
 import { Button } from '../components/Button';
@@ -14,6 +14,9 @@ export const UnderReviewScreen: React.FC = () => {
   const navigation = useAppNavigation();
   const hasNavigated = useRef(false);
   const [rejectedMessage, setRejectedMessage] = useState<string | null>(null);
+  const [rejectedReason, setRejectedReason] = useState<string | null>(null);
+  const [showApproved, setShowApproved] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
   const kycSessionId = useAuthStore((s) => s.kycSessionId);
   const setKycSessionId = useAuthStore((s) => s.setKycSessionId);
   const setDriverStatus = useAuthStore((s) => s.setDriverStatus);
@@ -22,16 +25,13 @@ export const UnderReviewScreen: React.FC = () => {
   const { data, failureCount, refetch } = useQuery({
     queryKey: ['driverStatus'],
     queryFn: async () => {
-      // In dev (no webhooks), refresh the DIDIT decision first so the DB
-      // stays in sync. Production webhooks make this a no-op.
       if (kycSessionId) {
         try {
           await apiClient.get(`/kyc/decision/${kycSessionId}`);
         } catch {
-          // best-effort; real result comes from webhook or next poll
+          // best-effort
         }
       }
-
       const statusData = await getValidated('/drivers/me/status', driverStatusSchema);
       return statusData;
     },
@@ -48,22 +48,40 @@ export const UnderReviewScreen: React.FC = () => {
     if (data.status === 'approved') {
       hasNavigated.current = true;
       setKycSessionId(null);
-      navigation.replace('Online');
-      return;
+      setShowApproved(true);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+      const timer = setTimeout(() => {
+        navigation.replace('Online');
+      }, 1500);
+      return () => clearTimeout(timer);
     }
 
     if (data.status === 'rejected') {
       hasNavigated.current = true;
       setKycSessionId(null);
-      setRejectedMessage('Tu verificacion fue rechazada. Por favor intenta nuevamente.');
-      const timer = setTimeout(() => {
-        navigation.replace('KYCVerify');
-      }, 2500);
-      return () => clearTimeout(timer);
+
+      // Different rejection paths: KYC identity vs document review
+      if (data.step === 'kyc') {
+        // KYC (identity) rejection — go back to identity verification
+        setRejectedMessage('Tu verificacion de identidad fue rechazada.');
+        if (data.admin_review_notes) {
+          setRejectedReason(data.admin_review_notes);
+        }
+      } else {
+        // Document rejection — go back to document upload
+        setRejectedMessage('Tus documentos fueron rechazados.');
+        if (data.admin_review_notes) {
+          setRejectedReason(data.admin_review_notes);
+        }
+      }
+      return;
     }
 
-    // KYC just got approved → the flow continues (vehicle / documents). Advance
-    // the user to whatever step is now pending instead of leaving them waiting.
+    // KYC just got approved → advance to next step
     if (data.step && data.step !== 'review' && data.step !== 'kyc') {
       const route = STEP_ROUTE[data.step];
       if (route?.screen) {
@@ -72,19 +90,68 @@ export const UnderReviewScreen: React.FC = () => {
         navigation.replace(route.screen);
       }
     }
-  }, [data, navigation, setKycSessionId, setDriverStatus, setOnboardingStep]);
+  }, [data, navigation, setKycSessionId, setDriverStatus, setOnboardingStep, fadeAnim]);
 
   const showError = failureCount >= 3;
+
+  const handleRetry = () => {
+    refetch();
+  };
+
+  const handleGoBack = () => {
+    if (data?.step === 'kyc' || !data?.step) {
+      navigation.replace('KYCVerify');
+    } else {
+      navigation.replace('OnboardingStep2');
+    }
+    hasNavigated.current = false;
+  };
+
+  const handleGoToDocuments = () => {
+    navigation.replace('OnboardingStep2');
+  };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.content}>
-        {showError ? (
+        {showApproved ? (
+          <Animated.View style={[styles.approvedContent, { opacity: fadeAnim }]}>
+            <View style={styles.checkCircle}>
+              <Text style={styles.checkIcon}>✓</Text>
+            </View>
+            <Text style={styles.approvedTitle}>Verificado</Text>
+            <Text style={styles.approvedSubtitle}>Tu cuenta esta lista para empezar</Text>
+          </Animated.View>
+        ) : showError ? (
           <>
             <Text style={styles.errorTitle}>No pudimos verificar tu estado. Reintenta.</Text>
-            <Button title="Reintentar" onPress={() => refetch()} style={styles.button} />
+            <Button title="Reintentar" onPress={handleRetry} style={styles.button} />
+            {data?.step && (data.step === 'review' || data.step === 'documents') && (
+              <Button
+                title="Volver a subir documentos"
+                variant="secondary"
+                onPress={handleGoToDocuments}
+                style={styles.button}
+              />
+            )}
+          </>
+        ) : rejectedMessage ? (
+          <>
+            <View style={styles.iconCircle}>
+              <Text style={styles.rejectedIcon}>✕</Text>
+            </View>
+            <Text style={styles.rejectedText}>{rejectedMessage}</Text>
+            {rejectedReason ? (
+              <Text style={styles.rejectedReason}>Motivo: {rejectedReason}</Text>
+            ) : null}
+            <Text style={styles.rejectedHint}>Por favor volve a intentarlo.</Text>
+            <Button
+              title={data?.step === 'kyc' ? 'Reintentar verificacion' : 'Volver a subir documentos'}
+              onPress={handleGoBack}
+              style={styles.button}
+            />
           </>
         ) : (
           <>
@@ -92,9 +159,7 @@ export const UnderReviewScreen: React.FC = () => {
               <Text style={styles.clockIcon}>⏳</Text>
             </View>
 
-            {rejectedMessage ? (
-              <Text style={styles.rejectedText}>{rejectedMessage}</Text>
-            ) : data?.step === 'kyc' ? (
+            {data?.step === 'kyc' ? (
               <>
                 <Text style={styles.title}>Tu identidad esta siendo verificada</Text>
                 <Text style={styles.subtitle}>
@@ -104,21 +169,21 @@ export const UnderReviewScreen: React.FC = () => {
             ) : (
               <>
                 <Text style={styles.title}>Tus datos estan siendo verificados</Text>
-                <Text style={styles.subtitle}>
-                  Te avisaremos por WhatsApp cuando tu cuenta este verificada
-                </Text>
+                <Text style={styles.subtitle}>Te avisaremos cuando tu cuenta este verificada</Text>
               </>
             )}
           </>
         )}
       </View>
 
-      <Button
-        title="Salir"
-        variant="secondary"
-        onPress={() => BackHandler.exitApp()}
-        style={styles.exitButton}
-      />
+      {!showApproved && !rejectedMessage && !showError && (
+        <Button
+          title="Salir"
+          variant="secondary"
+          onPress={() => BackHandler.exitApp()}
+          style={styles.exitButton}
+        />
+      )}
     </View>
   );
 };
@@ -145,6 +210,10 @@ const styles = StyleSheet.create({
   },
   clockIcon: {
     fontSize: 40,
+  },
+  rejectedIcon: {
+    fontSize: 36,
+    color: theme.colors.dangerRed,
   },
   title: {
     fontSize: theme.fontSize.xl,
@@ -174,8 +243,50 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     width: 280,
   },
+  rejectedReason: {
+    fontSize: theme.fontSize.md,
+    color: theme.colors.mediumGray,
+    textAlign: 'center',
+    width: 280,
+    lineHeight: 22,
+  },
+  rejectedHint: {
+    fontSize: theme.fontSize.md,
+    color: theme.colors.mediumGray,
+    textAlign: 'center',
+    width: 280,
+  },
+  approvedContent: {
+    alignItems: 'center',
+    gap: theme.spacing.lg,
+  },
+  checkCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: theme.radius.full,
+    backgroundColor: theme.colors.turquoise,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkIcon: {
+    fontSize: 48,
+    color: theme.colors.white,
+    fontWeight: theme.fontWeight.bold,
+  },
+  approvedTitle: {
+    fontSize: theme.fontSize['2xl'],
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.deepBlue,
+    textAlign: 'center',
+  },
+  approvedSubtitle: {
+    fontSize: theme.fontSize.md,
+    color: theme.colors.mediumGray,
+    textAlign: 'center',
+    width: 280,
+  },
   button: {
-    marginTop: theme.spacing.md,
+    marginTop: theme.spacing.sm,
   },
   exitButton: {
     alignSelf: 'center',
