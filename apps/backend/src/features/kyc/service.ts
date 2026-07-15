@@ -62,8 +62,27 @@ export const kycService = {
   },
 
   // KYC is user-level (vendor_data = user.id), so the app can start a session
-  // without knowing the driver row id.
+  // without knowing the driver row id. Resets kyc_status to 'pending' on both
+  // users and drivers so the DIDIT webhook can transition out of any prior state.
   async createUserSession(user: AuthUser) {
+    await db
+      .update(users)
+      .set({ kyc_status: 'pending', updated_at: new Date() })
+      .where(eq(users.id, user.id));
+
+    const [driver] = await db
+      .select({ id: drivers.id })
+      .from(drivers)
+      .where(eq(drivers.user_id, user.id))
+      .limit(1);
+
+    if (driver) {
+      await db
+        .update(drivers)
+        .set({ kyc_status: 'pending', updated_at: new Date() })
+        .where(eq(drivers.id, driver.id));
+    }
+
     return createSession(user.id);
   },
 

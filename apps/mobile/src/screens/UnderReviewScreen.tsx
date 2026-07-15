@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { apiClient, getValidated } from '../api/client';
 import { driverStatusSchema } from '../api/types';
 import { Button } from '../components/Button';
@@ -94,6 +94,13 @@ export const UnderReviewScreen: React.FC = () => {
 
             {rejectedMessage ? (
               <Text style={styles.rejectedText}>{rejectedMessage}</Text>
+            ) : data?.step === 'kyc' ? (
+              <>
+                <Text style={styles.title}>Tu identidad esta siendo verificada</Text>
+                <Text style={styles.subtitle}>
+                  DIDIT esta revisando tus datos biometricos. Te avisaremos cuando este lista.
+                </Text>
+              </>
             ) : (
               <>
                 <Text style={styles.title}>Tus datos estan siendo verificados</Text>
@@ -109,7 +116,7 @@ export const UnderReviewScreen: React.FC = () => {
       <Button
         title="Salir"
         variant="secondary"
-        onPress={() => navigation.replace('Welcome')}
+        onPress={() => BackHandler.exitApp()}
         style={styles.exitButton}
       />
     </View>

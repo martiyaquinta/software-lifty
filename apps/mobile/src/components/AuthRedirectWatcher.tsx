@@ -1,8 +1,9 @@
 import { useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { InteractionManager } from 'react-native';
+import type { DriverStatus } from '../api/types';
 import { useAppNavigation } from '../hooks/useAppNavigation';
-import { STEP_ROUTE } from '../lib/postAuthRouting';
+import { STEP_ROUTE, routeForDriverStatus } from '../lib/postAuthRouting';
 import { useAuthStore } from '../store/authStore';
 
 const PUBLIC_ROUTES = ['', 'register', 'forgot-password'];
@@ -36,7 +37,11 @@ export function AuthRedirectWatcher() {
     if (!isAuthenticated || !PUBLIC_ROUTES.includes(segments[0] ?? '')) return;
 
     const target = onboardingStep ? STEP_ROUTE[onboardingStep] : undefined;
-    const screen = target?.screen ?? (driverStatus === 'approved' ? 'Online' : 'OnboardingStep1');
+    const fallback = routeForDriverStatus({
+      status: driverStatus ?? 'pending',
+      step: onboardingStep as DriverStatus['step'],
+    });
+    const screen = target?.screen || fallback.screen || 'OnboardingStep1';
 
     InteractionManager.runAfterInteractions(() => {
       replace(screen);
