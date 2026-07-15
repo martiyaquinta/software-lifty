@@ -133,7 +133,16 @@ export const paymentMethodSchema = z.object({
 export const documentSchema = z.object({
   id: z.string(),
   driver_id: z.string(),
-  doc_type: z.enum(['drivers_license', 'vehicle_registration', 'vehicle_insurance']),
+  doc_type: z.enum([
+    'license_front',
+    'license_back',
+    'registration_front',
+    'registration_back',
+    'insurance_front',
+    'insurance_back',
+    'background_check_front',
+    'background_check_back',
+  ]),
   file_url: z.string(),
   file_name: z.string(),
   created_at: z.string(),

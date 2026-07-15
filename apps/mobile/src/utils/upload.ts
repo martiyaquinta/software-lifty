@@ -1,21 +1,34 @@
 import { apiClient } from '../api/client';
 
-const DOC_TYPE_MAP: Record<string, string> = {
+export type DocBase =
+  | 'drivers_license'
+  | 'vehicle_registration'
+  | 'vehicle_insurance'
+  | 'background_check';
+export type DocSide = 'front' | 'back';
+
+const DOC_BASE_MAP: Record<DocBase, string> = {
   drivers_license: 'license',
   vehicle_registration: 'registration',
   vehicle_insurance: 'insurance',
+  background_check: 'background_check',
 };
+
+export function toBackendDocType(base: DocBase, side: DocSide): string {
+  return `${DOC_BASE_MAP[base]}_${side}`;
+}
 
 export async function uploadDocumentToBackend(
   uri: string,
   fileName: string,
   mimeType: string,
-  docType: string,
+  docBase: DocBase,
+  side: DocSide,
 ): Promise<{ file_url: string; id?: string }> {
   const formData = new FormData();
 
   formData.append('file', { uri, type: mimeType, name: fileName } as any);
-  formData.append('doc_type', DOC_TYPE_MAP[docType] ?? docType);
+  formData.append('doc_type', toBackendDocType(docBase, side));
 
   const { data } = await apiClient.post('/onboarding/step3/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -28,7 +41,8 @@ export async function reuploadDocumentToBackend(
   uri: string,
   fileName: string,
   mimeType: string,
-  docType: string,
+  docBase: DocBase,
+  side: DocSide,
 ): Promise<{
   id: string;
   doc_type: string;
@@ -39,7 +53,7 @@ export async function reuploadDocumentToBackend(
   const formData = new FormData();
 
   formData.append('file', { uri, type: mimeType, name: fileName } as any);
-  formData.append('doc_type', DOC_TYPE_MAP[docType] ?? docType);
+  formData.append('doc_type', toBackendDocType(docBase, side));
 
   const { data } = await apiClient.post('/drivers/me/documents/reupload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },

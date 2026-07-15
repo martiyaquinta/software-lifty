@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
 import { driverDocuments, drivers, refreshTokens, users, vehicles } from '../../shared/db/schema';
+import { DOC_TYPES } from '../../shared/lib/documents';
 import { createTestToken } from '../../shared/testing/utils';
 
 let app: any;
@@ -172,27 +173,27 @@ describe('Onboarding', () => {
       token,
     );
 
+    const all8Docs = DOC_TYPES.map((doc_type) => ({
+      doc_type,
+      file_url: `https://files.example.com/${doc_type}.pdf`,
+    }));
+
     const { status, data } = await request(
       'POST',
       '/api/onboarding/step3',
-      {
-        documents: [
-          { doc_type: 'license', file_url: 'https://files.example.com/license.pdf' },
-          { doc_type: 'insurance', file_url: 'https://files.example.com/insurance.pdf' },
-        ],
-      },
+      { documents: all8Docs },
       token,
     );
 
     expect(status).toBe(200);
     expect(data.status).toBe('review');
     expect(data.message).toBe('Step 3 completed. Documents submitted for review.');
-    expect(data.documents.length).toBe(2);
+    expect(data.documents.length).toBe(8);
     expect(data.kyc_session).toBeUndefined();
 
     const db = getDb();
     const allDocs = await db.select().from(driverDocuments);
-    expect(allDocs.length).toBe(2);
+    expect(allDocs.length).toBe(8);
 
     const [driver] = await db.select().from(drivers);
     expect(driver!.status).toBe('review');
@@ -206,7 +207,7 @@ describe('Onboarding', () => {
       'POST',
       '/api/onboarding/step3',
       {
-        documents: [{ doc_type: 'license', file_url: 'https://files.example.com/license.pdf' }],
+        documents: [{ doc_type: 'license_front', file_url: 'https://files.example.com/license.pdf' }],
       },
       token,
     );
@@ -237,6 +238,60 @@ describe('Onboarding', () => {
 
     expect(status).toBe(400);
     expect(data.error.code).toBe('BAD_REQUEST');
+  });
+
+  test('upload accepts new front/back doc types', async () => {
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await request('POST', '/api/onboarding/step1', { full_name: 'Test' }, token);
+    await approveKyc(userId);
+    await request(
+      'POST',
+      '/api/onboarding/step2',
+      { brand: 'Toyota', model: 'Corolla', year: 2022, color: 'Blanco', plate: 'ABC123' },
+      token,
+    );
+
+    const fileContent = new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' });
+    const formData = new FormData();
+    formData.append('file', fileContent, 'license-front.png');
+    formData.append('doc_type', 'license_front');
+
+    const res = await app.handle(
+      new Request('http://localhost/api/onboarding/step3/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      }),
+    );
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.doc_type).toBe('license_front');
+  });
+
+  test('upload rejects legacy doc types', async () => {
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await request('POST', '/api/onboarding/step1', { full_name: 'Test' }, token);
+    await approveKyc(userId);
+    await request(
+      'POST',
+      '/api/onboarding/step2',
+      { brand: 'Toyota', model: 'Corolla', year: 2022, color: 'Blanco', plate: 'ABC123' },
+      token,
+    );
+
+    const fileContent = new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' });
+    const formData = new FormData();
+    formData.append('file', fileContent, 'license.png');
+    formData.append('doc_type', 'license');
+
+    const res = await app.handle(
+      new Request('http://localhost/api/onboarding/step3/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      }),
+    );
+    expect(res.status).toBe(400);
   });
 
   test('status returns current step and info', async () => {
@@ -274,7 +329,7 @@ describe('Onboarding', () => {
     const fileContent = new Blob(['test content'], { type: 'image/png' });
     const formData = new FormData();
     formData.append('file', fileContent, 'license.png');
-    formData.append('doc_type', 'license');
+    formData.append('doc_type', 'license_front');
 
     const req = new Request('http://localhost/api/onboarding/step3/upload', {
       method: 'POST',
@@ -285,14 +340,14 @@ describe('Onboarding', () => {
     const data = await res.json();
     expect(res.status).toBe(200);
     expect(data.file_url).toBeDefined();
-    expect(data.doc_type).toBe('license');
+    expect(data.doc_type).toBe('license_front');
     expect(data.kyc_session).toBeUndefined();
   });
 
   test('step3/upload without auth returns 401', async () => {
     const formData = new FormData();
     formData.append('file', new Blob(['x']), 'test.png');
-    formData.append('doc_type', 'license');
+    formData.append('doc_type', 'license_front');
     const req = new Request('http://localhost/api/onboarding/step3/upload', {
       method: 'POST',
       body: formData,

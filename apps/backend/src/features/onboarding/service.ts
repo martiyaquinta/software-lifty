@@ -1,23 +1,14 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
 import { driverDocuments, drivers, vehicles } from '../../shared/db/schema';
 import { users } from '../../shared/db/schema';
 import { createSession } from '../../shared/lib/didit';
+import { DOC_TYPES } from '../../shared/lib/documents';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
 import { uploadFile } from '../../shared/lib/storage';
 import type { AuthUser } from '../../shared/middleware/auth';
 import { notifyAdminsNewDocuments } from '../admin/notifications';
-
-const VALID_DOC_TYPES = [
-  'license',
-  'registration',
-  'insurance',
-  'background_check',
-  'drivers_license',
-  'vehicle_registration',
-  'vehicle_insurance',
-];
 
 async function getOrThrow(user: AuthUser) {
   const [driver] = await db.select().from(drivers).where(eq(drivers.user_id, user.id)).limit(1);
@@ -157,7 +148,7 @@ export const onboardingService = {
     }
 
     for (const d of docs) {
-      if (!VALID_DOC_TYPES.includes(d.doc_type)) {
+      if (!(DOC_TYPES as readonly string[]).includes(d.doc_type)) {
         throw new AppError(`Invalid doc_type: ${d.doc_type}`, 400, 'BAD_REQUEST');
       }
     }
@@ -179,10 +170,25 @@ export const onboardingService = {
         expires_at: driverDocuments.expires_at,
       });
 
-    await db
-      .update(drivers)
-      .set({ status: 'review', updated_at: new Date() })
-      .where(eq(drivers.id, driver.id));
+    const uploaded = await db
+      .select({ doc_type: driverDocuments.doc_type })
+      .from(driverDocuments)
+      .where(
+        and(eq(driverDocuments.driver_id, driver.id), ne(driverDocuments.status, 'superseded')),
+      );
+
+    const uploadedTypes = new Set(uploaded.map((d) => d.doc_type));
+    let status: string = driver.status;
+    let message = 'Documents uploaded successfully.';
+
+    if (DOC_TYPES.every((t) => uploadedTypes.has(t))) {
+      await db
+        .update(drivers)
+        .set({ status: 'review', admin_review_status: 'pending', updated_at: new Date() })
+        .where(eq(drivers.id, driver.id));
+      status = 'review';
+      message = 'Step 3 completed. Documents submitted for review.';
+    }
 
     {
       const [userRow] = await db
@@ -195,8 +201,8 @@ export const onboardingService = {
 
     return {
       documents: created,
-      status: 'review',
-      message: 'Step 3 completed. Documents submitted for review.',
+      status,
+      message,
     };
   },
 
@@ -212,7 +218,7 @@ export const onboardingService = {
       );
     }
 
-    if (!VALID_DOC_TYPES.includes(docType)) {
+    if (!(DOC_TYPES as readonly string[]).includes(docType)) {
       throw new AppError(`Invalid doc_type: ${docType}`, 400, 'BAD_REQUEST');
     }
 
@@ -236,10 +242,20 @@ export const onboardingService = {
 
     if (!doc) throw new AppError('Failed to upload document', 400, 'BAD_REQUEST');
 
-    await db
-      .update(drivers)
-      .set({ status: 'review', updated_at: new Date() })
-      .where(eq(drivers.id, driver.id));
+    const uploaded = await db
+      .select({ doc_type: driverDocuments.doc_type })
+      .from(driverDocuments)
+      .where(
+        and(eq(driverDocuments.driver_id, driver.id), ne(driverDocuments.status, 'superseded')),
+      );
+
+    const uploadedTypes = new Set(uploaded.map((d) => d.doc_type));
+    if (DOC_TYPES.every((t) => uploadedTypes.has(t))) {
+      await db
+        .update(drivers)
+        .set({ status: 'review', admin_review_status: 'pending', updated_at: new Date() })
+        .where(eq(drivers.id, driver.id));
+    }
 
     {
       const [userRow] = await db
