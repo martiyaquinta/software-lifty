@@ -169,15 +169,30 @@ export const onboardingService = {
         expires_at: driverDocuments.expires_at,
       });
 
-    await db
-      .update(drivers)
-      .set({ status: 'review', updated_at: new Date() })
-      .where(eq(drivers.id, driver.id));
+    const uploaded = await db
+      .select({ doc_type: driverDocuments.doc_type })
+      .from(driverDocuments)
+      .where(
+        and(eq(driverDocuments.driver_id, driver.id), ne(driverDocuments.status, 'superseded')),
+      );
+
+    const uploadedTypes = new Set(uploaded.map((d) => d.doc_type));
+    let status: string = driver.status;
+    let message = 'Documents uploaded successfully.';
+
+    if (DOC_TYPES.every((t) => uploadedTypes.has(t))) {
+      await db
+        .update(drivers)
+        .set({ status: 'review', admin_review_status: 'pending', updated_at: new Date() })
+        .where(eq(drivers.id, driver.id));
+      status = 'review';
+      message = 'Step 3 completed. Documents submitted for review.';
+    }
 
     return {
       documents: created,
-      status: 'review',
-      message: 'Step 3 completed. Documents submitted for review.',
+      status,
+      message,
     };
   },
 

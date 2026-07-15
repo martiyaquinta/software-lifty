@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
 import { driverDocuments, drivers, refreshTokens, users, vehicles } from '../../shared/db/schema';
+import { DOC_TYPES } from '../../shared/lib/documents';
 import { createTestToken } from '../../shared/testing/utils';
 
 let app: any;
@@ -63,10 +64,10 @@ async function createReviewDriver(): Promise<{ token: string; driverId: string }
   await request('POST', '/api/onboarding/step2', { brand: 'Toyota', model: 'Corolla', year: 2022, color: 'Blanco', plate: 'ABC123' }, token);
 
   await request('POST', '/api/onboarding/step3', {
-    documents: [
-      { doc_type: 'license_front', file_url: 'https://example.com/license.pdf' },
-      { doc_type: 'insurance_front', file_url: 'https://example.com/insurance.pdf' },
-    ],
+    documents: DOC_TYPES.map((doc_type) => ({
+      doc_type,
+      file_url: `https://example.com/${doc_type}.pdf`,
+    })),
   }, token);
 
   return { token, driverId };
@@ -109,7 +110,7 @@ describe('Admin', () => {
     expect(data[0].id).toBe(driverId);
     expect(data[0].full_name).toBe('Test Driver');
     expect(data[0].status).toBe('review');
-    expect(data[0].documents_submitted).toBe(2);
+    expect(data[0].documents_submitted).toBe(8);
   });
 
   test('GET /drivers/:id returns full detail', async () => {
@@ -126,7 +127,7 @@ describe('Admin', () => {
     expect(data.vehicles.length).toBe(1);
     expect(data.vehicles[0].brand).toBe('Toyota');
     expect(data.documents).toBeArray();
-    expect(data.documents.length).toBe(2);
+    expect(data.documents.length).toBe(8);
   });
 
   test('POST /drivers/:id/review approve', async () => {

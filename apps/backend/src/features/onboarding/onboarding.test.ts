@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
 import { driverDocuments, drivers, refreshTokens, users, vehicles } from '../../shared/db/schema';
+import { DOC_TYPES } from '../../shared/lib/documents';
 import { createTestToken } from '../../shared/testing/utils';
 
 let app: any;
@@ -172,27 +173,27 @@ describe('Onboarding', () => {
       token,
     );
 
+    const all8Docs = DOC_TYPES.map((doc_type) => ({
+      doc_type,
+      file_url: `https://files.example.com/${doc_type}.pdf`,
+    }));
+
     const { status, data } = await request(
       'POST',
       '/api/onboarding/step3',
-      {
-        documents: [
-          { doc_type: 'license_front', file_url: 'https://files.example.com/license.pdf' },
-          { doc_type: 'insurance_front', file_url: 'https://files.example.com/insurance.pdf' },
-        ],
-      },
+      { documents: all8Docs },
       token,
     );
 
     expect(status).toBe(200);
     expect(data.status).toBe('review');
     expect(data.message).toBe('Step 3 completed. Documents submitted for review.');
-    expect(data.documents.length).toBe(2);
+    expect(data.documents.length).toBe(8);
     expect(data.kyc_session).toBeUndefined();
 
     const db = getDb();
     const allDocs = await db.select().from(driverDocuments);
-    expect(allDocs.length).toBe(2);
+    expect(allDocs.length).toBe(8);
 
     const [driver] = await db.select().from(drivers);
     expect(driver!.status).toBe('review');
