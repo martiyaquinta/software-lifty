@@ -41,8 +41,13 @@ Copiar `.env.example` a `.env` y completar las credenciales según el entorno.
 |---|---|
 | `DATABASE_URL` | Conexión a PostgreSQL |
 | `REDIS_URL` | Conexión a Redis |
-| `JWT_SECRET` | Clave para firmar access tokens (mín. 32 caracteres) |
-| `JWT_REFRESH_SECRET` | Clave para firmar refresh tokens (mín. 32 caracteres) |
+
+### Auth (Supabase)
+
+| Variable | Descripción |
+|---|---|
+| `SUPABASE_URL` | URL del proyecto Supabase |
+| `SUPABASE_PUBLISHABLE_KEY` | Publishable key (sb_publishable_...) para verificar tokens de usuario |
 
 ### Servicios externos (opcionales en dev)
 
@@ -51,15 +56,9 @@ Copiar `.env.example` a `.env` y completar las credenciales según el entorno.
 | `TWILIO_*` | Twilio | Envío de SMS (OTP). En dev se muestra por consola. |
 | `DIDIT_API_KEY`, `DIDIT_WEBHOOK_SECRET` | DIDIT | Verificación de identidad (KYC). |
 | `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET` | Mercado Pago | Cobro de viajes y retiros. En dev usa mocks. |
-| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Supabase Storage | Almacenamiento de documentos del conductor. |
+| `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | Supabase Storage | Almacenamiento de documentos del conductor. |
 | `FCM_SERVICE_ACCOUNT_JSON` | Firebase | Notificaciones push. |
 | `PHOTON_URL`, `OSRM_URL` | Komoot / OSRM | Geocodificación y cálculo de rutas. Tienen defaults públicos. |
-
-Para generar los secrets de JWT:
-
-```bash
-bun run generate-secrets
-```
 
 ## Endpoints
 

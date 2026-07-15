@@ -6,7 +6,7 @@ let supabase: ReturnType<typeof createClient> | null = null;
 function getClient() {
   if (!supabase) {
     const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_KEY;
+    const key = process.env.SUPABASE_SECRET_KEY;
     if (url && key) {
       supabase = createClient(url, key, {
         auth: { persistSession: false },

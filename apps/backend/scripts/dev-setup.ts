@@ -1,7 +1,7 @@
 /**
  * One-shot local dev setup:
  *   1. Starts Postgres (5433) + Redis (6380) via docker-compose.dev.yml
- *   2. Creates apps/backend/.env with a generated JWT_SECRET if missing
+ *   2. Creates apps/backend/.env with required vars if missing
  *   3. Runs migrations on the dev DB (lifty) and the test DB (lifty_test)
  *   4. Seeds districts
  *
@@ -57,13 +57,15 @@ if (!existsSync(envPath)) {
       '# WARNING: never point DATABASE_URL at a DB you care about and then',
       '# run tests — tests truncate every table.',
       `PORT=${apiPort}`,
-      `JWT_SECRET=${secret}`,
       `DATABASE_URL=${PG}/lifty`,
       'REDIS_URL=redis://localhost:6380',
+      'SUPABASE_URL=',
+      'SUPABASE_PUBLISHABLE_KEY=sb_publishable_...',
+      'SUPABASE_SECRET_KEY=sb_secret_...',
       '',
     ].join('\n'),
   );
-  console.log('🔑 Created apps/backend/.env with a fresh JWT_SECRET');
+  console.log('🔑 Created apps/backend/.env');
 } else {
   const current = await Bun.file(envPath).text();
   const m = current.match(/^PORT=(\d+)$/m);

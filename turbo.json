@@ -13,7 +13,6 @@
         "DATABASE_URL",
         "TEST_DATABASE_URL",
         "REDIS_URL",
-        "JWT_SECRET",
         "RATE_LIMIT_MAX",
         "RATE_LIMIT_WINDOW_MS"
       ]
