@@ -1,101 +1,82 @@
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
-process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
+process.env.DATABASE_URL =
+  process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
 
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test';
-import { SignJWT } from 'jose';
-import { createApp } from '../../index';
-import { getDb } from '../db/client';
-import { refreshTokens, users } from '../db/schema';
-import { createTestToken } from '../testing/utils';
+import { Elysia } from 'elysia';
+import { db } from '../db/client';
+import { users } from '../db/schema';
+import { getRedis } from '../lib/redis';
+import { createTestAuthPlugin, createTestToken } from '../testing/utils';
 
-async function makeRequest(
-  app: any,
-  path: string,
-  token: string,
-) {
-  const req = new Request(`http://localhost${path}`, {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const res = await app.handle(req);
-  return { status: res.status, data: await res.json() };
+let app: any;
+
+function buildApp() {
+  const plugin = createTestAuthPlugin();
+
+  return new Elysia()
+    .use(plugin)
+    .get('/test', ({ user, authStatus }) => ({ user: user ?? null, authStatus }));
 }
 
-describe('Auth middleware — auto-creation guard', () => {
-  const db = getDb();
+async function makeRequest(token?: string) {
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const req = new Request('http://localhost/test', { headers });
+  const res = await app.handle(req);
+  return res.json();
+}
 
-  beforeEach(async () => {
-    await db.delete(refreshTokens);
-    await db.delete(users);
+beforeEach(async () => {
+  await db.delete(users);
+  app = buildApp();
+
+  const redis = getRedis();
+  if (redis) {
+    try {
+      const keys = await redis.keys('ratelimit:*');
+      if (keys.length > 0) await redis.del(...keys);
+    } catch { /* best-effort */ }
+  }
+});
+
+afterAll(async () => {
+  await db.delete(users);
+});
+
+describe('authPlugin', () => {
+  test('returns no_token when no Authorization header', async () => {
+    const res = await makeRequest();
+    expect(res.user).toBeNull();
+    expect(res.authStatus).toBe('no_token');
   });
 
-  test('authenticated with valid token for existing user', async () => {
-    const app = createApp();
-    const [user] = await db
+  test('returns no_token when header is not Bearer', async () => {
+    const headers: Record<string, string> = { 'Authorization': 'Basic abc123' };
+    const req = new Request('http://localhost/test', { headers });
+    const res = await app.handle(req);
+    const data = await res.json();
+    expect(data.user).toBeNull();
+    expect(data.authStatus).toBe('no_token');
+  });
+
+  test('returns token_invalid for unknown user', async () => {
+    const res = await makeRequest('non-existent-uuid');
+    expect(res.user).toBeNull();
+    expect(res.authStatus).toBe('token_invalid');
+  });
+
+  test('returns authenticated for known user', async () => {
+    await db
       .insert(users)
-      .values({ phone: '+5492610000000', role: 'driver', password_hash: 'unused' })
-      .returning({ id: users.id });
-    const token = await createTestToken(user.id, 'driver');
+      .values({ id: 'test-user-1', role: 'driver', phone: '+1234567890' })
+      .returning();
 
-    const { status, data } = await makeRequest(app, '/api/auth/me', token);
-    expect(status).toBe(200);
-    expect(data.id).toBe(user.id);
-  });
-
-  test('REJECTS valid token for non-existent user — does NOT auto-create', async () => {
-    const unknownId = '00000000-0000-0000-0000-000000000000';
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET as string);
-    const token = await new SignJWT({ sub: unknownId, role: 'driver' })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setExpirationTime('1h')
-      .setIssuedAt()
-      .sign(secret);
-
-    const app = createApp();
-    const { status } = await makeRequest(app, '/api/auth/me', token);
-    expect(status).toBe(401);
-
-    const dbUsers = await db.select({ id: users.id }).from(users);
-    expect(dbUsers.length).toBe(0);
-  });
-
-  test('REJECTS valid token for non-existent user on protected API route', async () => {
-    const unknownId = '00000000-0000-0000-0000-000000000000';
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET as string);
-    const token = await new SignJWT({ sub: unknownId, role: 'driver' })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setExpirationTime('1h')
-      .setIssuedAt()
-      .sign(secret);
-
-    const app = createApp();
-    const { status } = await makeRequest(app, '/api/drivers/me', token);
-    expect(status).toBe(401);
-
-    const dbUsers = await db.select({ id: users.id }).from(users);
-    expect(dbUsers.length).toBe(0);
-  });
-
-  test('no_token when no authorization header', async () => {
-    const app = createApp();
-    const req = new Request('http://localhost/api/auth/me', { method: 'GET' });
-    const res = await app.handle(req);
-    expect(res.status).toBe(401);
-  });
-
-  test('token_invalid with malformed Bearer token', async () => {
-    const app = createApp();
-    const req = new Request('http://localhost/api/auth/me', {
-      method: 'GET',
-      headers: { Authorization: 'Bearer not.a.real.jwt' },
-    });
-    const res = await app.handle(req);
-    expect(res.status).toBe(401);
-  });
-
-  afterAll(async () => {
-    await db.delete(refreshTokens);
-    await db.delete(users);
+    const token = createTestToken('test-user-1');
+    const res = await makeRequest(token);
+    expect(res.user).not.toBeNull();
+    expect(res.user.id).toBe('test-user-1');
+    expect(res.user.role).toBe('driver');
+    expect(res.authStatus).toBe('authenticated');
   });
 });

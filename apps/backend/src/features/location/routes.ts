@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
-import { verifyAccess } from '../../shared/lib/jwt';
 import { safeCall } from '../../shared/lib/route-utils';
+import { getSupabaseClient } from '../../shared/lib/supabase';
 import { authGuard } from '../../shared/middleware/require-auth';
 import { locationUpdateBody } from './schema';
 import { getDriverIdByUserId, upsertLocation } from './service';
@@ -21,16 +21,23 @@ export const locationWsPlugin = new Elysia().ws('/ws/location', {
       return;
     }
 
-    const result = await verifyAccess(token);
-    if (!result.ok) {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
       ws.close(4001, 'Unauthorized');
       resolveReady!(null);
       return;
     }
 
-    (ws.data as any).userId = result.payload.sub;
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) {
+      ws.close(4001, 'Unauthorized');
+      resolveReady!(null);
+      return;
+    }
 
-    const driverId = await getDriverIdByUserId(result.payload.sub).catch(() => null);
+    (ws.data as any).userId = data.user.id;
+
+    const driverId = await getDriverIdByUserId(data.user.id).catch(() => null);
     if (!driverId) {
       ws.close(4001, 'No driver profile');
       resolveReady!(null);

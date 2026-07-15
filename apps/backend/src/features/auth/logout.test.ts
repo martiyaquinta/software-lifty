@@ -1,12 +1,11 @@
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
-process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test';
 import { createApp } from '../../index';
 import { getDb } from '../../shared/db/client';
-import { refreshTokens, users } from '../../shared/db/schema';
+import { users } from '../../shared/db/schema';
 import { getRedis } from '../../shared/lib/redis';
 import { createTestToken } from '../../shared/testing/utils';
 
@@ -22,38 +21,34 @@ async function request(app: any, method: string, path: string, token: string) {
   return { status: res.status, data: await res.json() };
 }
 
-describeOrSkip('Auth logout — access token revocation', () => {
+describeOrSkip('POST /api/auth/logout', () => {
   const db = getDb();
 
   beforeEach(async () => {
-    await db.delete(refreshTokens);
     await db.delete(users);
-    if (redis) {
-      const keys = await redis.keys('blacklist:access:*');
-      if (keys.length > 0) await redis.del(...keys);
-    }
   });
 
-  test('access token stops working after logout', async () => {
+  test('returns 401 without auth', async () => {
+    const app = createApp();
+    const req = new Request('http://localhost/api/auth/logout', { method: 'POST' });
+    const res = await app.handle(req);
+    expect(res.status).toBe(401);
+  });
+
+  test('returns success with valid auth', async () => {
     const app = createApp();
     const [user] = await db
       .insert(users)
-      .values({ phone: '+5492610000001', role: 'driver', password_hash: 'unused' })
+      .values({ phone: '+5492610000001', role: 'driver' })
       .returning({ id: users.id });
-    const token = await createTestToken(user.id, 'driver');
+    const token = createTestToken(user.id);
 
-    const before = await request(app, 'GET', '/api/auth/me', token);
-    expect(before.status).toBe(200);
-
-    const logout = await request(app, 'POST', '/api/auth/logout', token);
-    expect(logout.status).toBe(200);
-
-    const after = await request(app, 'GET', '/api/auth/me', token);
-    expect(after.status).toBe(401);
+    const { status, data } = await request(app, 'POST', '/api/auth/logout', token);
+    expect(status).toBe(200);
+    expect(data.message).toBe('Logged out successfully');
   });
 
   afterAll(async () => {
-    await db.delete(refreshTokens);
     await db.delete(users);
   });
 });

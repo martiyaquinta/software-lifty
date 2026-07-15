@@ -1,12 +1,11 @@
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
-process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars!!';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
-import { driverDocuments, drivers, refreshTokens, users, vehicles } from '../../shared/db/schema';
+import { driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
 import { DOC_TYPES } from '../../shared/lib/documents';
 import { createTestToken } from '../../shared/testing/utils';
 
@@ -17,7 +16,6 @@ async function truncateTables() {
   await db.delete(driverDocuments);
   await db.delete(vehicles);
   await db.delete(drivers);
-  await db.delete(refreshTokens);
   await db.delete(users);
 }
 
@@ -43,18 +41,18 @@ async function createAdminToken(): Promise<string> {
   const db = getDb();
   const [admin] = await db
     .insert(users)
-    .values({ phone: '+5492619999999', role: 'admin', password_hash: 'admin-hash' })
+    .values({ phone: '+5492619999999', role: 'admin' })
     .returning({ id: users.id });
-  return createTestToken(admin.id, 'admin');
+  return createTestToken(admin.id);
 }
 
 async function createReviewDriver(): Promise<{ token: string; driverId: string }> {
   const db = getDb();
   const [user] = await db
     .insert(users)
-    .values({ phone: '+5492618888888', full_name: 'Test Driver', role: 'driver', password_hash: 'unused', kyc_status: 'approved' })
+    .values({ phone: '+5492618888888', full_name: 'Test Driver', role: 'driver', kyc_status: 'approved' })
     .returning({ id: users.id });
-  const token = await createTestToken(user.id, 'driver');
+  const token = await createTestToken(user.id);
 
   const { data: step1 } = await request('POST', '/api/onboarding/step1', { full_name: 'Test Driver' }, token);
   const driverId = step1.id;
