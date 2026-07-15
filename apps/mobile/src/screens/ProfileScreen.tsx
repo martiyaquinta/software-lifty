@@ -62,13 +62,14 @@ interface DocumentItem {
 
 // Maps a backend doc_type back to the UploadDocument screen's docType param.
 const DOC_TYPE_TO_UPLOAD: Record<string, string> = {
-  license: 'drivers_license',
-  drivers_license: 'drivers_license',
-  registration: 'vehicle_registration',
-  vehicle_registration: 'vehicle_registration',
-  insurance: 'vehicle_insurance',
-  vehicle_insurance: 'vehicle_insurance',
-  background_check: 'background_check',
+  license_front: 'drivers_license',
+  license_back: 'drivers_license',
+  registration_front: 'vehicle_registration',
+  registration_back: 'vehicle_registration',
+  insurance_front: 'vehicle_insurance',
+  insurance_back: 'vehicle_insurance',
+  background_check_front: 'background_check',
+  background_check_back: 'background_check',
 };
 
 // The documents a driver can manage from the profile.
@@ -76,18 +77,22 @@ const MANAGEABLE_DOCS: { docType: string; label: string }[] = [
   { docType: 'drivers_license', label: 'Licencia de conducir' },
   { docType: 'vehicle_registration', label: 'Cedula del vehiculo' },
   { docType: 'vehicle_insurance', label: 'Seguro del vehiculo' },
+  { docType: 'background_check', label: 'Certificado de antecedentes penales' },
 ];
 
-function docStatusLabel(doc: DocumentItem): string {
-  if (doc.status === 'pending_review') return 'Pendiente de revision';
-  if (doc.status === 'rejected') return 'Rechazado';
-  if (doc.verified_at || doc.status === 'approved') return 'Verificado';
+function docsStatusLabel(docs: DocumentItem[]): string {
+  if (docs.length === 0) return 'No cargado';
+  if (docs.some((d) => d.status === 'rejected')) return 'Rechazado';
+  if (docs.length < 2) return 'Incompleto: falta una cara';
+  if (docs.some((d) => d.status === 'pending_review')) return 'Pendiente de revision';
+  if (docs.every((d) => d.verified_at || d.status === 'approved')) return 'Verificado';
   return 'Pendiente';
 }
 
-function docStatusIcon(doc: DocumentItem): string {
-  if (doc.status === 'rejected') return '❌';
-  if (doc.verified_at || doc.status === 'approved') return '✅';
+function docsStatusIcon(docs: DocumentItem[]): string {
+  if (docs.length === 0) return '➕';
+  if (docs.some((d) => d.status === 'rejected')) return '❌';
+  if (docs.length === 2 && docs.every((d) => d.verified_at || d.status === 'approved')) return '✅';
   return '⏳';
 }
 
@@ -284,13 +289,15 @@ export const ProfileScreen: React.FC = () => {
             </View>
           )}
           {MANAGEABLE_DOCS.map((managed) => {
-            const doc = documents.find((d) => DOC_TYPE_TO_UPLOAD[d.doc_type] === managed.docType);
+            const docsFor = documents.filter(
+              (d) => DOC_TYPE_TO_UPLOAD[d.doc_type] === managed.docType,
+            );
             return (
               <View key={managed.docType} style={styles.docRow}>
-                <Text style={styles.docIcon}>{doc ? docStatusIcon(doc) : '➕'}</Text>
+                <Text style={styles.docIcon}>{docsStatusIcon(docsFor)}</Text>
                 <View style={styles.docInfo}>
                   <Text style={styles.docName}>{managed.label}</Text>
-                  <Text style={styles.docStatus}>{doc ? docStatusLabel(doc) : 'No cargado'}</Text>
+                  <Text style={styles.docStatus}>{docsStatusLabel(docsFor)}</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() =>
@@ -301,7 +308,9 @@ export const ProfileScreen: React.FC = () => {
                     })
                   }
                 >
-                  <Text style={styles.docAction}>{doc ? 'Volver a subir' : 'Subir'}</Text>
+                  <Text style={styles.docAction}>
+                    {docsFor.length > 0 ? 'Volver a subir' : 'Subir'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             );
