@@ -228,7 +228,7 @@ export const onboardingService = {
     if (DOC_TYPES.every((t) => uploadedTypes.has(t))) {
       await db
         .update(drivers)
-        .set({ status: 'review', updated_at: new Date() })
+        .set({ status: 'review', admin_review_status: 'pending', updated_at: new Date() })
         .where(eq(drivers.id, driver.id));
     }
 
