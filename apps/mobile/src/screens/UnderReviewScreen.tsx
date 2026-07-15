@@ -21,6 +21,7 @@ export const UnderReviewScreen: React.FC = () => {
   const setKycSessionId = useAuthStore((s) => s.setKycSessionId);
   const setDriverStatus = useAuthStore((s) => s.setDriverStatus);
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
+  const onboardingStep = useAuthStore((s) => s.onboardingStep);
 
   const { data, failureCount, refetch } = useQuery({
     queryKey: ['driverStatus'],
@@ -92,6 +93,42 @@ export const UnderReviewScreen: React.FC = () => {
     }
   }, [data, navigation, setKycSessionId, setDriverStatus, setOnboardingStep, fadeAnim]);
 
+  useEffect(() => {
+    if (!__DEV__) return;
+    if (hasNavigated.current) return;
+
+    const step = onboardingStep ?? data?.step;
+    if (step !== 'review') return;
+
+    const timer = setTimeout(() => {
+      hasNavigated.current = true;
+      setDriverStatus('approved');
+      setOnboardingStep('approved');
+      setKycSessionId(null);
+      setShowApproved(true);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+      const navTimer = setTimeout(() => {
+        navigation.replace('Profile');
+      }, 1500);
+      return () => clearTimeout(navTimer);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [
+    onboardingStep,
+    data,
+    navigation,
+    setKycSessionId,
+    setDriverStatus,
+    setOnboardingStep,
+    fadeAnim,
+    setShowApproved,
+  ]);
+
   const showError = failureCount >= 3;
 
   const handleRetry = () => {
@@ -128,7 +165,10 @@ export const UnderReviewScreen: React.FC = () => {
           <>
             <Text style={styles.errorTitle}>No pudimos verificar tu estado. Reintenta.</Text>
             <Button title="Reintentar" onPress={handleRetry} style={styles.button} />
-            {data?.step && (data.step === 'review' || data.step === 'documents') && (
+            {(data?.step === 'review' ||
+              data?.step === 'documents' ||
+              onboardingStep === 'review' ||
+              onboardingStep === 'documents') && (
               <Button
                 title="Volver a subir documentos"
                 variant="secondary"
@@ -170,6 +210,14 @@ export const UnderReviewScreen: React.FC = () => {
               <>
                 <Text style={styles.title}>Tus datos estan siendo verificados</Text>
                 <Text style={styles.subtitle}>Te avisaremos cuando tu cuenta este verificada</Text>
+                {(data?.step === 'review' || data?.step === 'documents') && (
+                  <Button
+                    title="Volver a subir documentos"
+                    variant="secondary"
+                    onPress={handleGoToDocuments}
+                    style={styles.button}
+                  />
+                )}
               </>
             )}
           </>
@@ -181,6 +229,21 @@ export const UnderReviewScreen: React.FC = () => {
           title="Salir"
           variant="secondary"
           onPress={() => BackHandler.exitApp()}
+          style={styles.exitButton}
+        />
+      )}
+
+      {__DEV__ && !showApproved && (
+        <Button
+          title="Saltar >> Profile (DEV)"
+          variant="cta"
+          onPress={() => {
+            hasNavigated.current = true;
+            setDriverStatus('approved');
+            setOnboardingStep('approved');
+            setKycSessionId(null);
+            navigation.replace('Profile');
+          }}
           style={styles.exitButton}
         />
       )}
