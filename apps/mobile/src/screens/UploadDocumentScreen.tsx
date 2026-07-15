@@ -17,9 +17,15 @@ import { Button } from '../components/Button';
 import { Navbar } from '../components/Navbar';
 import { theme } from '../theme';
 import { compressImage } from '../utils/image';
+import type { DocBase, DocSide } from '../utils/upload';
 import { reuploadDocumentToBackend, uploadDocumentToBackend } from '../utils/upload';
 
-type DocType = 'drivers_license' | 'vehicle_registration' | 'vehicle_insurance';
+type DocType = DocBase;
+
+const SIDES: { side: DocSide; label: string }[] = [
+  { side: 'front', label: 'Frente' },
+  { side: 'back', label: 'Dorso' },
+];
 
 type SelectedFile = {
   uri: string;
@@ -38,12 +44,16 @@ export const UploadDocumentScreen: React.FC = () => {
 
   const isReupload = mode === 'reupload';
 
-  const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<Record<DocSide, SelectedFile | null>>({
+    front: null,
+    back: null,
+  });
   const [uploading, setUploading] = useState(false);
+  const bothSelected = selectedFiles.front !== null && selectedFiles.back !== null;
 
   const title = docLabel || 'Subir documento';
 
-  const handleCamera = async () => {
+  const handleCamera = async (side: DocSide) => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Permiso denegado', 'Necesitamos acceso a la camara para sacar una foto.');
@@ -57,16 +67,19 @@ export const UploadDocumentScreen: React.FC = () => {
 
     if (!result.canceled && result.assets.length > 0) {
       const asset = result.assets[0];
-      setSelectedFile({
-        uri: asset.uri,
-        name: `photo-${Date.now()}.jpg`,
-        mimeType: 'image/jpeg',
-        size: asset.fileSize,
-      });
+      setSelectedFiles((prev) => ({
+        ...prev,
+        [side]: {
+          uri: asset.uri,
+          name: `photo-${Date.now()}.jpg`,
+          mimeType: 'image/jpeg',
+          size: asset.fileSize,
+        },
+      }));
     }
   };
 
-  const handleGallery = async () => {
+  const handleGallery = async (side: DocSide) => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert(
@@ -84,16 +97,19 @@ export const UploadDocumentScreen: React.FC = () => {
     if (!result.canceled && result.assets.length > 0) {
       const asset = result.assets[0];
       const extension = asset.uri.split('.').pop() || 'jpg';
-      setSelectedFile({
-        uri: asset.uri,
-        name: `image-${Date.now()}.${extension}`,
-        mimeType: asset.mimeType || 'image/jpeg',
-        size: asset.fileSize,
-      });
+      setSelectedFiles((prev) => ({
+        ...prev,
+        [side]: {
+          uri: asset.uri,
+          name: `image-${Date.now()}.${extension}`,
+          mimeType: asset.mimeType || 'image/jpeg',
+          size: asset.fileSize,
+        },
+      }));
     }
   };
 
-  const handleDocument = async () => {
+  const handleDocument = async (side: DocSide) => {
     const result = await DocumentPicker.getDocumentAsync({
       type: '*/*',
       copyToCacheDirectory: true,
@@ -101,48 +117,60 @@ export const UploadDocumentScreen: React.FC = () => {
 
     if (!result.canceled && result.assets.length > 0) {
       const asset = result.assets[0];
-      setSelectedFile({
-        uri: asset.uri,
-        name: asset.name,
-        mimeType: asset.mimeType,
-        size: asset.size,
-      });
+      setSelectedFiles((prev) => ({
+        ...prev,
+        [side]: {
+          uri: asset.uri,
+          name: asset.name,
+          mimeType: asset.mimeType,
+          size: asset.size,
+        },
+      }));
     }
   };
 
   const handleUpload = async () => {
-    if (!selectedFile || !docType) return;
+    if (!bothSelected || !docType) return;
 
     setUploading(true);
     try {
-      let uploadUri = selectedFile.uri;
-      let uploadName = selectedFile.name;
-      let uploadMimeType = selectedFile.mimeType || 'application/octet-stream';
+      let requiresReview = false;
+      for (const { side } of SIDES) {
+        const file = selectedFiles[side];
+        if (!file) continue;
 
-      if (uploadMimeType.startsWith('image/')) {
-        try {
-          const compressed = await compressImage(uploadUri);
-          uploadUri = compressed.uri;
-          uploadName = uploadName.replace(/\.[^.]+$/, '.jpg');
-          uploadMimeType = 'image/jpeg';
-        } catch {}
+        let uploadUri = file.uri;
+        let uploadName = file.name;
+        let uploadMimeType = file.mimeType || 'application/octet-stream';
+
+        if (uploadMimeType.startsWith('image/')) {
+          try {
+            const compressed = await compressImage(uploadUri);
+            uploadUri = compressed.uri;
+            uploadName = uploadName.replace(/\.[^.]+$/, '.jpg');
+            uploadMimeType = 'image/jpeg';
+          } catch {}
+        }
+
+        if (isReupload) {
+          const result = await reuploadDocumentToBackend(
+            uploadUri,
+            uploadName,
+            uploadMimeType,
+            docType,
+            side,
+          );
+          requiresReview = requiresReview || result.requires_review;
+        } else {
+          await uploadDocumentToBackend(uploadUri, uploadName, uploadMimeType, docType, side);
+        }
       }
 
-      if (isReupload) {
-        const result = await reuploadDocumentToBackend(
-          uploadUri,
-          uploadName,
-          uploadMimeType,
-          docType,
+      if (isReupload && requiresReview) {
+        Alert.alert(
+          'Documento enviado',
+          'Tu documento quedo pendiente de revision. No vas a poder conectarte hasta que un administrador lo apruebe.',
         );
-        if (result.requires_review) {
-          Alert.alert(
-            'Documento enviado',
-            'Tu documento quedo pendiente de revision. No vas a poder conectarte hasta que un administrador lo apruebe.',
-          );
-        }
-      } else {
-        await uploadDocumentToBackend(uploadUri, uploadName, uploadMimeType, docType);
       }
       router.back();
     } catch (err) {
@@ -152,8 +180,6 @@ export const UploadDocumentScreen: React.FC = () => {
       setUploading(false);
     }
   };
-
-  const isImage = selectedFile?.mimeType?.startsWith('image/');
 
   return (
     <View style={styles.container}>
@@ -167,58 +193,76 @@ export const UploadDocumentScreen: React.FC = () => {
             : 'Subi el documento requerido'}
         </Text>
 
-        <View style={styles.preview}>
-          {selectedFile ? (
-            isImage ? (
-              <Image source={{ uri: selectedFile.uri }} style={styles.previewImage} />
-            ) : (
-              <View style={styles.previewFile}>
-                <Text style={styles.previewIcon}>📄</Text>
-                <Text style={styles.previewFileName} numberOfLines={2}>
-                  {selectedFile.name}
-                </Text>
+        {SIDES.map(({ side, label }) => {
+          const file = selectedFiles[side];
+          const isImage = file?.mimeType?.startsWith('image/');
+          return (
+            <View key={side} style={styles.sideSection}>
+              <Text style={styles.sideTitle}>{label}</Text>
+              <View style={styles.preview}>
+                {file ? (
+                  isImage ? (
+                    <Image source={{ uri: file.uri }} style={styles.previewImage} />
+                  ) : (
+                    <View style={styles.previewFile}>
+                      <Text style={styles.previewIcon}>📄</Text>
+                      <Text style={styles.previewFileName} numberOfLines={2}>
+                        {file.name}
+                      </Text>
+                    </View>
+                  )
+                ) : (
+                  <>
+                    <Text style={styles.previewIcon}>📄</Text>
+                    <Text style={styles.previewText}>Todavia no subiste nada</Text>
+                  </>
+                )}
               </View>
-            )
-          ) : (
-            <>
-              <Text style={styles.previewIcon}>📄</Text>
-              <Text style={styles.previewText}>Todavia no subiste nada</Text>
-            </>
-          )}
-        </View>
 
-        {!selectedFile && (
-          <View style={styles.options}>
-            <TouchableOpacity style={styles.option} onPress={handleCamera} activeOpacity={0.7}>
-              <Text style={styles.optionText}>📷 Sacar foto</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.option} onPress={handleGallery} activeOpacity={0.7}>
-              <Text style={styles.optionText}>🖼 Subir de galeria</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.option} onPress={handleDocument} activeOpacity={0.7}>
-              <Text style={styles.optionText}>📁 Subir archivo</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+              {file ? (
+                <Button
+                  title="CAMBIAR ARCHIVO"
+                  variant="secondary"
+                  onPress={() => setSelectedFiles((prev) => ({ ...prev, [side]: null }))}
+                  style={styles.button}
+                />
+              ) : (
+                <View style={styles.options}>
+                  <TouchableOpacity
+                    style={styles.option}
+                    onPress={() => handleCamera(side)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.optionText}>📷 Sacar foto</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.option}
+                    onPress={() => handleGallery(side)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.optionText}>🖼 Subir de galeria</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.option}
+                    onPress={() => handleDocument(side)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.optionText}>📁 Subir archivo</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          );
+        })}
 
-        {selectedFile && (
-          <View style={styles.uploadSection}>
-            <Button
-              title="CAMBIAR ARCHIVO"
-              variant="secondary"
-              onPress={() => setSelectedFile(null)}
-              style={styles.button}
-            />
-            <Button
-              title="SUBIR"
-              variant="primary"
-              onPress={handleUpload}
-              loading={uploading}
-              disabled={uploading}
-              style={styles.button}
-            />
-          </View>
-        )}
+        <Button
+          title="SUBIR"
+          variant="primary"
+          onPress={handleUpload}
+          loading={uploading}
+          disabled={uploading || !bothSelected}
+          style={styles.button}
+        />
       </ScrollView>
     </View>
   );
@@ -244,9 +288,18 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     color: theme.colors.mediumGray,
   },
+  sideSection: {
+    width: 343,
+    gap: theme.spacing.sm,
+  },
+  sideTitle: {
+    fontSize: theme.fontSize.md,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.deepBlue,
+  },
   preview: {
     width: 343,
-    height: 200,
+    height: 140,
     borderRadius: theme.radius.md,
     backgroundColor: theme.colors.lightGray,
     alignItems: 'center',
@@ -291,11 +344,6 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: theme.fontSize.md,
     color: theme.colors.deepBlue,
-  },
-  uploadSection: {
-    width: 343,
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.sm,
   },
   button: {
     width: 343,

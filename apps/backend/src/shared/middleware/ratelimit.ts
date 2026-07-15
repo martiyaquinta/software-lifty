@@ -28,48 +28,52 @@ export function rateLimit(config?: Partial<RateLimitConfig>) {
       (cleanup as any).unref();
     }
 
-    return new Elysia({ name }).onBeforeHandle(({ request, set }) => {
+    return new Elysia({ name })
+      .onBeforeHandle(({ request, set }) => {
+        const rawForwarded = request.headers.get('x-forwarded-for');
+        const ip = rawForwarded ? rawForwarded.split(',')[0].trim() : '127.0.0.1';
+        const now = Date.now();
+        let entry = store.get(ip);
+        if (!entry || now > entry.resetAt) {
+          entry = { count: 0, resetAt: now + windowMs };
+          store.set(ip, entry);
+        }
+        entry.count++;
+        set.headers['X-RateLimit-Limit'] = String(max);
+        set.headers['X-RateLimit-Remaining'] = String(Math.max(0, max - entry.count));
+        set.headers['X-RateLimit-Reset'] = String(Math.ceil(entry.resetAt / 1000));
+        if (entry.count > max) {
+          set.status = 429;
+          return { error: 'Too Many Requests', message: 'Rate limit exceeded' };
+        }
+      })
+      .as('scoped');
+  }
+
+  return new Elysia({ name })
+    .onBeforeHandle(async ({ request, set }) => {
       const rawForwarded = request.headers.get('x-forwarded-for');
       const ip = rawForwarded ? rawForwarded.split(',')[0].trim() : '127.0.0.1';
-      const now = Date.now();
-      let entry = store.get(ip);
-      if (!entry || now > entry.resetAt) {
-        entry = { count: 0, resetAt: now + windowMs };
-        store.set(ip, entry);
+      const key = `${keyPrefix}:${ip}`;
+      const windowSeconds = Math.ceil(windowMs / 1000);
+
+      const count = await redis.incr(key);
+      if (count === 1) {
+        await redis.expire(key, windowSeconds);
       }
-      entry.count++;
+
+      const ttl = await redis.ttl(key);
+      const remaining = Math.max(0, max - count);
+      const resetAt = Math.floor(Date.now() / 1000) + (ttl > 0 ? ttl : windowSeconds);
+
       set.headers['X-RateLimit-Limit'] = String(max);
-      set.headers['X-RateLimit-Remaining'] = String(Math.max(0, max - entry.count));
-      set.headers['X-RateLimit-Reset'] = String(Math.ceil(entry.resetAt / 1000));
-      if (entry.count > max) {
+      set.headers['X-RateLimit-Remaining'] = String(remaining);
+      set.headers['X-RateLimit-Reset'] = String(resetAt);
+
+      if (count > max) {
         set.status = 429;
         return { error: 'Too Many Requests', message: 'Rate limit exceeded' };
       }
-    });
-  }
-
-  return new Elysia({ name }).onBeforeHandle(async ({ request, set }) => {
-    const rawForwarded = request.headers.get('x-forwarded-for');
-    const ip = rawForwarded ? rawForwarded.split(',')[0].trim() : '127.0.0.1';
-    const key = `${keyPrefix}:${ip}`;
-    const windowSeconds = Math.ceil(windowMs / 1000);
-
-    const count = await redis.incr(key);
-    if (count === 1) {
-      await redis.expire(key, windowSeconds);
-    }
-
-    const ttl = await redis.ttl(key);
-    const remaining = Math.max(0, max - count);
-    const resetAt = Math.floor(Date.now() / 1000) + (ttl > 0 ? ttl : windowSeconds);
-
-    set.headers['X-RateLimit-Limit'] = String(max);
-    set.headers['X-RateLimit-Remaining'] = String(remaining);
-    set.headers['X-RateLimit-Reset'] = String(resetAt);
-
-    if (count > max) {
-      set.status = 429;
-      return { error: 'Too Many Requests', message: 'Rate limit exceeded' };
-    }
-  });
+    })
+    .as('scoped');
 }

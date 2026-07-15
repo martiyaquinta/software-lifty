@@ -18,17 +18,23 @@ import { useAppNavigation } from '../hooks/useAppNavigation';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
 import { compressImage } from '../utils/image';
-import { uploadDocumentToBackend } from '../utils/upload';
+import { type DocBase, type DocSide, uploadDocumentToBackend } from '../utils/upload';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-type DocType = 'drivers_license' | 'vehicle_registration' | 'vehicle_insurance';
+type DocType = DocBase;
 type PickMethod = 'camera' | 'gallery' | 'file';
 
 const DOCS: { type: DocType; label: string }[] = [
   { type: 'drivers_license', label: 'Licencia de conducir' },
   { type: 'vehicle_registration', label: 'Cedula del vehiculo' },
   { type: 'vehicle_insurance', label: 'Seguro del vehiculo' },
+  { type: 'background_check', label: 'Certificado de antecedentes penales' },
+];
+
+const SIDES: { side: DocSide; label: string }[] = [
+  { side: 'front', label: 'Frente' },
+  { side: 'back', label: 'Dorso' },
 ];
 
 interface DocState {
@@ -49,25 +55,33 @@ const initialDocState: DocState = {
   error: null,
 };
 
+type SideState = Record<DocSide, DocState>;
+
+const initialSideState = (): SideState => ({
+  front: { ...initialDocState },
+  back: { ...initialDocState },
+});
+
 export const OnboardingStep2Screen: React.FC = () => {
   const navigation = useAppNavigation();
   const driverId = useAuthStore((s) => s.driverId);
-  const [docs, setDocs] = useState<Record<DocType, DocState>>({
-    drivers_license: { ...initialDocState },
-    vehicle_registration: { ...initialDocState },
-    vehicle_insurance: { ...initialDocState },
+  const [docs, setDocs] = useState<Record<DocType, SideState>>({
+    drivers_license: initialSideState(),
+    vehicle_registration: initialSideState(),
+    vehicle_insurance: initialSideState(),
+    background_check: initialSideState(),
   });
 
-  const allUploaded = Object.values(docs).every((d) => d.uploaded);
+  const allUploaded = Object.values(docs).every((d) => d.front.uploaded && d.back.uploaded);
 
   const handlePick = useCallback(
-    async (docType: DocType, method: PickMethod) => {
+    async (docType: DocType, side: DocSide, method: PickMethod) => {
       if (!driverId) {
         setDocs((prev) => ({
           ...prev,
           [docType]: {
             ...prev[docType],
-            error: 'Sesion no valida. Reincia la app.',
+            [side]: { ...prev[docType][side], error: 'Sesion no valida. Reincia la app.' },
           },
         }));
         return;
@@ -80,7 +94,7 @@ export const OnboardingStep2Screen: React.FC = () => {
             ...prev,
             [docType]: {
               ...prev[docType],
-              error: 'Permiso de camara denegado',
+              [side]: { ...prev[docType][side], error: 'Permiso de camara denegado' },
             },
           }));
           return;
@@ -133,7 +147,7 @@ export const OnboardingStep2Screen: React.FC = () => {
             ...prev,
             [docType]: {
               ...prev[docType],
-              error: 'El archivo debe ser menor a 10MB',
+              [side]: { ...prev[docType][side], error: 'El archivo debe ser menor a 10MB' },
             },
           }));
           return;
@@ -163,23 +177,29 @@ export const OnboardingStep2Screen: React.FC = () => {
           ...prev,
           [docType]: {
             ...prev[docType],
-            fileUri: uri,
-            fileName: name,
-            uploading: true,
-            error: null,
+            [side]: {
+              ...prev[docType][side],
+              fileUri: uri,
+              fileName: name,
+              uploading: true,
+              error: null,
+            },
           },
         }));
 
-        const result = await uploadDocumentToBackend(uri!, name!, mimeType!, docType);
+        const result = await uploadDocumentToBackend(uri!, name!, mimeType!, docType, side);
 
         setDocs((prev) => ({
           ...prev,
           [docType]: {
             ...prev[docType],
-            fileUrl: result.file_url,
-            uploading: false,
-            uploaded: true,
-            error: null,
+            [side]: {
+              ...prev[docType][side],
+              fileUrl: result.file_url,
+              uploading: false,
+              uploaded: true,
+              error: null,
+            },
           },
         }));
       } catch (err: unknown) {
@@ -188,9 +208,12 @@ export const OnboardingStep2Screen: React.FC = () => {
           ...prev,
           [docType]: {
             ...prev[docType],
-            uploading: false,
-            uploaded: false,
-            error: message,
+            [side]: {
+              ...prev[docType][side],
+              uploading: false,
+              uploaded: false,
+              error: message,
+            },
           },
         }));
       }
@@ -198,10 +221,10 @@ export const OnboardingStep2Screen: React.FC = () => {
     [driverId],
   );
 
-  const handleRetry = useCallback((docType: DocType) => {
+  const handleRetry = useCallback((docType: DocType, side: DocSide) => {
     setDocs((prev) => ({
       ...prev,
-      [docType]: { ...initialDocState },
+      [docType]: { ...prev[docType], [side]: { ...initialDocState } },
     }));
   }, []);
 
@@ -217,71 +240,77 @@ export const OnboardingStep2Screen: React.FC = () => {
         <Text style={styles.title}>Subi tus documentos</Text>
         <Text style={styles.subtitle}>Los necesitamos para habilitar tu cuenta</Text>
 
-        {DOCS.map((doc) => {
-          const state = docs[doc.type];
-          return (
-            <View key={doc.type} style={styles.uploadBlock}>
-              <View style={styles.uploadIcon}>
-                <Ionicons
-                  name="document-text-outline"
-                  size={24}
-                  color={theme.colors.mediumGray}
-                  accessibilityLabel="Subir documento"
-                />
-              </View>
-              <Text style={styles.uploadTitle}>{doc.label}</Text>
-
-              {state.uploaded ? (
-                <View style={styles.uploadedRow}>
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={18}
-                    color={theme.colors.turquoise}
-                    accessibilityLabel="Documento subido"
-                  />
-                  <Text style={styles.fileName} numberOfLines={1}>
-                    {state.fileName}
-                  </Text>
-                </View>
-              ) : state.uploading ? (
-                <ActivityIndicator size="small" color={theme.colors.turquoise} />
-              ) : (
-                <View style={styles.uploadOptions}>
-                  <TouchableOpacity
-                    style={styles.uploadOption}
-                    onPress={() => handlePick(doc.type, 'camera')}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.optionText}>Sacar foto</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.uploadOption}
-                    onPress={() => handlePick(doc.type, 'gallery')}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.optionText}>Subir de galeria</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.uploadOption}
-                    onPress={() => handlePick(doc.type, 'file')}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.optionText}>Subir archivo</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {state.error && (
-                <View style={styles.errorRow}>
-                  <Text style={styles.errorText}>{state.error}</Text>
-                  <TouchableOpacity onPress={() => handleRetry(doc.type)}>
-                    <Text style={styles.retryText}>Reintentar</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+        {DOCS.map((doc) => (
+          <View key={doc.type} style={styles.uploadBlock}>
+            <View style={styles.uploadIcon}>
+              <Ionicons
+                name="document-text-outline"
+                size={24}
+                color={theme.colors.mediumGray}
+                accessibilityLabel="Subir documento"
+              />
             </View>
-          );
-        })}
+            <Text style={styles.uploadTitle}>{doc.label}</Text>
+
+            {SIDES.map(({ side, label }) => {
+              const state = docs[doc.type][side];
+              return (
+                <View key={side} style={styles.sideBlock}>
+                  <Text style={styles.sideLabel}>{label}</Text>
+
+                  {state.uploaded ? (
+                    <View style={styles.uploadedRow}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={18}
+                        color={theme.colors.turquoise}
+                        accessibilityLabel="Documento subido"
+                      />
+                      <Text style={styles.fileName} numberOfLines={1}>
+                        {state.fileName}
+                      </Text>
+                    </View>
+                  ) : state.uploading ? (
+                    <ActivityIndicator size="small" color={theme.colors.turquoise} />
+                  ) : (
+                    <View style={styles.uploadOptions}>
+                      <TouchableOpacity
+                        style={styles.uploadOption}
+                        onPress={() => handlePick(doc.type, side, 'camera')}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.optionText}>Sacar foto</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.uploadOption}
+                        onPress={() => handlePick(doc.type, side, 'gallery')}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.optionText}>Subir de galeria</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.uploadOption}
+                        onPress={() => handlePick(doc.type, side, 'file')}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.optionText}>Subir archivo</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {state.error && (
+                    <View style={styles.errorRow}>
+                      <Text style={styles.errorText}>{state.error}</Text>
+                      <TouchableOpacity onPress={() => handleRetry(doc.type, side)}>
+                        <Text style={styles.retryText}>Reintentar</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        ))}
 
         <Button
           title="ENVIAR DOCUMENTOS"
@@ -336,6 +365,20 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.md,
     fontWeight: theme.fontWeight.medium,
     color: theme.colors.deepBlue,
+  },
+  sideBlock: {
+    width: '100%',
+    gap: theme.spacing.sm,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.lightGray,
+    paddingTop: theme.spacing.sm,
+  },
+  sideLabel: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.deepBlue,
+    alignSelf: 'flex-start',
   },
   uploadOptions: {
     width: '100%',

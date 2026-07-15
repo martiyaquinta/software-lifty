@@ -1,37 +1,24 @@
 import { and, eq, ne } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
 import { driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
+import { DOC_TYPES } from '../../shared/lib/documents';
 import { AppError, ConflictError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
 import { uploadFile } from '../../shared/lib/storage';
 import type { AuthUser } from '../../shared/middleware/auth';
 
-const VALID_DOC_TYPES = [
-  'drivers_license',
-  'vehicle_registration',
-  'vehicle_insurance',
-  'license',
-  'registration',
-  'insurance',
-  'background_check',
-];
+const VALID_DOC_TYPES: readonly string[] = DOC_TYPES;
 
 // Sensitive documents gate the driver's ability to go online: re-uploading one
 // forces a fresh admin review and pauses "online" until approved. The server —
 // never the client — decides sensitivity, so a driver can't dodge review by
 // mislabelling a doc_type.
-const SENSITIVE_DOC_TYPES = new Set([
-  'drivers_license',
-  'license',
-  'vehicle_registration',
-  'registration',
-  'vehicle_insurance',
-  'insurance',
-  'background_check',
-]);
+const SENSITIVE_DOC_TYPES = new Set<string>(DOC_TYPES);
 
-// Documents required to finish onboarding (licencia, cedula, seguro).
-const REQUIRED_DOCUMENT_COUNT = 3;
+function hasAllRequiredDocs(uploaded: { doc_type: string }[]): boolean {
+  const types = new Set(uploaded.map((d) => d.doc_type));
+  return DOC_TYPES.every((t) => types.has(t));
+}
 
 export const driversService = {
   async getPublicProfile(driverId: string) {
@@ -139,7 +126,7 @@ export const driversService = {
 
     // Vehicle done — documents required next.
     const docsList = await db
-      .select({ id: driverDocuments.id })
+      .select({ doc_type: driverDocuments.doc_type })
       .from(driverDocuments)
       .where(
         and(
@@ -149,7 +136,7 @@ export const driversService = {
         ),
       );
 
-    if (docsList.length < REQUIRED_DOCUMENT_COUNT) {
+    if (!hasAllRequiredDocs(docsList)) {
       return { status: 'pending', step: 'documents', kyc_status: 'approved' };
     }
 
@@ -336,7 +323,7 @@ export const driversService = {
     });
 
     const docsList = await db
-      .select({ id: driverDocuments.id })
+      .select({ doc_type: driverDocuments.doc_type })
       .from(driverDocuments)
       .where(
         and(
@@ -348,7 +335,7 @@ export const driversService = {
 
     // All required docs submitted → hand the driver to the admin review queue
     // (adminService.listPending filters by status = 'review').
-    if (docsList.length >= REQUIRED_DOCUMENT_COUNT && driver.status !== 'approved') {
+    if (hasAllRequiredDocs(docsList) && driver.status !== 'approved') {
       await db
         .update(drivers)
         .set({ status: 'review', admin_review_status: 'pending', updated_at: new Date() })
