@@ -85,6 +85,7 @@ export const driversService = {
         status: drivers.status,
         kyc_status: drivers.kyc_status,
         admin_review_status: drivers.admin_review_status,
+        admin_review_notes: drivers.admin_review_notes,
         documents_pending_review: drivers.documents_pending_review,
       })
       .from(drivers)
@@ -114,7 +115,12 @@ export const driversService = {
       };
     }
     if (driver.status === 'rejected' || driver.admin_review_status === 'rejected') {
-      return { status: 'rejected', step: 'review', kyc_status: driver.kyc_status };
+      return {
+        status: 'rejected',
+        step: 'review',
+        kyc_status: driver.kyc_status,
+        admin_review_notes: driver.admin_review_notes,
+      };
     }
 
     // KYC gate: identity must be verified before anything else.
