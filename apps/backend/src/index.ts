@@ -27,12 +27,10 @@ import { requestId } from './shared/middleware/request-id';
 import { cors, securityHeaders } from './shared/middleware/security';
 
 function validateEnv() {
-  const required = ['JWT_SECRET', 'DATABASE_URL', 'RESEND_API_KEY'];
+  const required = ['SUPABASE_URL', 'DATABASE_URL', 'RESEND_API_KEY'];
   for (const key of required) {
     if (!process.env[key]) throw new Error(`Missing required env var: ${key}`);
   }
-  if ((process.env.JWT_SECRET?.length ?? 0) < 32)
-    throw new Error('JWT_SECRET must be at least 32 characters');
   const port = process.env.PORT;
   if (port !== undefined && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)) {
     throw new Error('PORT must be a valid port number (1-65535)');
@@ -57,7 +55,7 @@ export function createApp() {
             description: 'Driver-Side MVP — Lifty backend. 49 endpoints, 15 DB tables, 111 tests.',
           },
           tags: [
-            { name: 'auth', description: 'Autenticación, registro, login, JWT' },
+            { name: 'auth', description: 'Perfil y logout (auth via Supabase)' },
             { name: 'onboarding', description: 'Onboarding del conductor (5 pasos)' },
             { name: 'kyc', description: 'Verificación de identidad DIDIT' },
             { name: 'trips', description: 'State machine de viajes' },
