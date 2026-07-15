@@ -374,7 +374,7 @@ describe('Onboarding', () => {
       'POST',
       '/api/onboarding/step3',
       {
-        documents: [{ doc_type: 'license', file_url: 'https://x.com/a.jpg' }],
+        documents: [{ doc_type: 'license_front', file_url: 'https://x.com/a.jpg' }],
       },
       token,
     );
@@ -451,7 +451,7 @@ describe('Onboarding', () => {
     );
     const fd = new FormData();
     fd.append('file', new Blob(['c']), 'doc.png');
-    fd.append('doc_type', 'license');
+    fd.append('doc_type', 'license_front');
     const r = new Request('http://localhost/api/onboarding/step3/upload', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
@@ -462,7 +462,7 @@ describe('Onboarding', () => {
   test('step3/upload no auth → 401', async () => {
     const fd = new FormData();
     fd.append('file', new Blob(['x']), 'x.png');
-    fd.append('doc_type', 'license');
+    fd.append('doc_type', 'license_front');
     const r = new Request('http://localhost/api/onboarding/step3/upload', {
       method: 'POST',
       body: fd,
