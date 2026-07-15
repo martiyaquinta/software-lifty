@@ -6,6 +6,7 @@ import { AppError, ConflictError, NotFoundError } from '../../shared/lib/errors'
 import { logger } from '../../shared/lib/logger';
 import { uploadFile } from '../../shared/lib/storage';
 import type { AuthUser } from '../../shared/middleware/auth';
+import { notifyAdminsNewDocuments } from '../admin/notifications';
 
 const VALID_DOC_TYPES: readonly string[] = DOC_TYPES;
 
@@ -71,6 +72,7 @@ export const driversService = {
         status: drivers.status,
         kyc_status: drivers.kyc_status,
         admin_review_status: drivers.admin_review_status,
+        admin_review_notes: drivers.admin_review_notes,
         documents_pending_review: drivers.documents_pending_review,
       })
       .from(drivers)
@@ -100,7 +102,12 @@ export const driversService = {
       };
     }
     if (driver.status === 'rejected' || driver.admin_review_status === 'rejected') {
-      return { status: 'rejected', step: 'review', kyc_status: driver.kyc_status };
+      return {
+        status: 'rejected',
+        step: 'review',
+        kyc_status: driver.kyc_status,
+        admin_review_notes: driver.admin_review_notes,
+      };
     }
 
     // KYC gate: identity must be verified before anything else.
@@ -340,6 +347,13 @@ export const driversService = {
         .update(drivers)
         .set({ status: 'review', admin_review_status: 'pending', updated_at: new Date() })
         .where(eq(drivers.id, driver.id));
+
+      const [userRow] = await db
+        .select({ full_name: users.full_name })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1);
+      notifyAdminsNewDocuments(userRow?.full_name ?? 'Driver', driver.id);
     }
 
     const result = await this.getMyStatus(user);
@@ -460,6 +474,13 @@ export const driversService = {
         driverId: driver.id.split('-')[0],
         docType,
       });
+
+      const [userRow] = await db
+        .select({ full_name: users.full_name })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1);
+      notifyAdminsNewDocuments(userRow?.full_name ?? 'Driver', driver.id);
     }
 
     return {

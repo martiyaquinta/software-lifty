@@ -8,6 +8,7 @@ import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
 import { uploadFile } from '../../shared/lib/storage';
 import type { AuthUser } from '../../shared/middleware/auth';
+import { notifyAdminsNewDocuments } from '../admin/notifications';
 
 async function getOrThrow(user: AuthUser) {
   const [driver] = await db.select().from(drivers).where(eq(drivers.user_id, user.id)).limit(1);
@@ -189,6 +190,15 @@ export const onboardingService = {
       message = 'Step 3 completed. Documents submitted for review.';
     }
 
+    {
+      const [userRow] = await db
+        .select({ full_name: users.full_name })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1);
+      notifyAdminsNewDocuments(userRow?.full_name ?? 'Driver', driver.id);
+    }
+
     return {
       documents: created,
       status,
@@ -245,6 +255,15 @@ export const onboardingService = {
         .update(drivers)
         .set({ status: 'review', admin_review_status: 'pending', updated_at: new Date() })
         .where(eq(drivers.id, driver.id));
+    }
+
+    {
+      const [userRow] = await db
+        .select({ full_name: users.full_name })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1);
+      notifyAdminsNewDocuments(userRow?.full_name ?? 'Driver', driver.id);
     }
 
     return { id: doc.id, doc_type: doc.doc_type, file_url: doc.file_url };
