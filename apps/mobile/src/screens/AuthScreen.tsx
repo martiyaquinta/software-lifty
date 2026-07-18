@@ -90,6 +90,7 @@ export const AuthScreen: React.FC = () => {
       setOtp('');
       setCooldown(COOLDOWN_SECONDS);
     } catch (err) {
+      console.error('[AuthScreen] sendEmailOtp error:', err);
       setError(getFriendlyAuthError(err));
     } finally {
       setSending(false);

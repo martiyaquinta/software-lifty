@@ -1,10 +1,24 @@
 import * as Crypto from 'expo-crypto';
 
-if (!(globalThis as any).crypto?.subtle?.digest) {
-  if (!(globalThis as any).crypto) {
-    (globalThis as any).crypto = {};
-  }
-  (globalThis as any).crypto.subtle = {
+// biome-ignore lint/suspicious/noExplicitAny: crypto polyfill for React Native (Hermes)
+const g = globalThis as any;
+
+if (!g.crypto) {
+  g.crypto = {};
+}
+
+if (!g.crypto.getRandomValues) {
+  g.crypto.getRandomValues = (array: Uint8Array) => {
+    const bytes = Crypto.getRandomBytes(array.length);
+    for (let i = 0; i < bytes.length; i++) {
+      array[i] = bytes[i];
+    }
+    return array;
+  };
+}
+
+if (!g.crypto.subtle?.digest) {
+  g.crypto.subtle = {
     digest: async (_algorithm: string, data: Uint8Array): Promise<ArrayBuffer> => {
       const input = Array.from(data, (b) => String.fromCharCode(b)).join('');
       const hexHash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, input);
