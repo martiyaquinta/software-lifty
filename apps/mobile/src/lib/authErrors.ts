@@ -27,6 +27,9 @@ export function getFriendlyAuthError(error: unknown): string {
   if (message.includes('rate') || message.includes('too many') || message.includes('security')) {
     return 'Demasiados intentos. Espera un momento antes de reintentar.';
   }
+  if (message.includes('send') && message.includes('email')) {
+    return 'Error al enviar el email. Verifica tu conexion o intenta mas tarde.';
+  }
   if (
     message.includes('email') &&
     (message.includes('valid') || message.includes('format') || message.includes('invalid'))
@@ -45,5 +48,6 @@ export function getFriendlyAuthError(error: unknown): string {
     return 'No se pudo iniciar sesion con ese proveedor. Intenta de nuevo.';
   }
 
+  console.error('[getFriendlyAuthError] Unknown error:', raw, '| original:', error);
   return 'No se pudo completar el inicio de sesion. Intenta de nuevo.';
 }

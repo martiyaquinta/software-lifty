@@ -89,7 +89,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: normalizeEmail(email),
       options: { shouldCreateUser: true },
     });
-    if (error) throw error;
+    if (error) {
+      console.error('[sendEmailOtp] Supabase error:', error);
+      throw error;
+    }
   }, []);
 
   const resendEmailOtp = useCallback(async (email: string) => {
@@ -107,7 +110,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       token: code.trim(),
       type: 'email',
     });
-    if (error) throw error;
+    if (error) {
+      console.error('[verifyEmailOtp] Supabase error:', error);
+      throw error;
+    }
     return data.session;
   }, []);
 
