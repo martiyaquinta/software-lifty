@@ -1,4 +1,5 @@
 import { AppError } from './errors';
+import { logger } from './logger';
 
 export async function safeCall<T>(fn: () => Promise<T>, set: { status: number }) {
   try {
@@ -15,6 +16,11 @@ export async function safeCall<T>(fn: () => Promise<T>, set: { status: number })
       (err as Record<string, unknown>).statusCode ?? (err as Record<string, unknown>).status ?? 500;
     set.status =
       typeof statusCode === 'number' && statusCode >= 400 && statusCode < 600 ? statusCode : 500;
+    logger.error('[safeCall] unhandled error', {
+      message: (err as Error).message,
+      cause: (err as Error & { cause?: unknown }).cause,
+      stack: (err as Error).stack,
+    });
     const message =
       process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test'
         ? (err as Error).message

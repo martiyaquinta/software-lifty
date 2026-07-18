@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -15,6 +15,7 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Navbar } from '../components/Navbar';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { STEP_ROUTE } from '../lib/postAuthRouting';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
 
@@ -85,14 +86,6 @@ export const OnboardingVehicleScreen: React.FC = () => {
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [submitError, setSubmitError] = useState('');
 
-  // Guard: this screen is only reachable once KYC is approved. If the user is
-  // still under review, bounce them to the waiting screen.
-  useEffect(() => {
-    if (driverStatus === 'under_review') {
-      navigation.replace('UnderReview');
-    }
-  }, [driverStatus]);
-
   const setError = (field: keyof ValidationErrors, error: string | undefined) => {
     setErrors((prev) => ({ ...prev, [field]: error }));
   };
@@ -103,7 +96,7 @@ export const OnboardingVehicleScreen: React.FC = () => {
     setSubmitError('');
 
     try {
-      await apiClient.put('/drivers/me', {
+      const { data } = await apiClient.put('/drivers/me', {
         vehicle_plate: normalizePlate(vehiclePlate),
         vehicle_brand: vehicleBrand.trim(),
         vehicle_model: vehicleModel.trim(),
@@ -112,7 +105,13 @@ export const OnboardingVehicleScreen: React.FC = () => {
         vehicle_type: vehicleType,
       });
 
-      navigation.navigate('OnboardingStep2');
+      const step: string = data?.step ?? 'documents';
+      const target = STEP_ROUTE[step];
+      if (target) {
+        navigation.replace(target.screen);
+      } else {
+        navigation.navigate('OnboardingStep2');
+      }
     } catch (err: any) {
       setSubmitError(err?.message ?? 'Error al guardar el vehiculo');
     } finally {

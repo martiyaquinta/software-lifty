@@ -88,7 +88,7 @@ export const UnderReviewScreen: React.FC = () => {
       if (route?.screen) {
         hasNavigated.current = true;
         setKycSessionId(null);
-        navigation.replace(route.screen);
+        navigation.navigate(route.screen);
       }
     }
   }, [data, navigation, setKycSessionId, setDriverStatus, setOnboardingStep, fadeAnim]);
@@ -137,15 +137,16 @@ export const UnderReviewScreen: React.FC = () => {
 
   const handleGoBack = () => {
     if (data?.step === 'kyc' || !data?.step) {
-      navigation.replace('KYCVerify');
+      navigation.navigate('KYCVerify');
     } else {
-      navigation.replace('OnboardingStep2');
+      navigation.navigate('OnboardingStep2');
     }
     hasNavigated.current = false;
   };
 
   const handleGoToDocuments = () => {
-    navigation.replace('OnboardingStep2');
+    navigation.navigate('OnboardingStep2');
+    hasNavigated.current = false;
   };
 
   return (

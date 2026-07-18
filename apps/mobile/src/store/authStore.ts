@@ -9,6 +9,7 @@ interface AuthState {
   driverId: string | null;
   isAuthenticated: boolean;
   needsRedirect: boolean;
+  sessionRestored: boolean;
   phone: string | null;
   driverStatus: DriverStatusValue;
   onboardingStep: string | null;
@@ -21,6 +22,7 @@ interface AuthState {
   setDriverStatus: (status: DriverStatusValue) => void;
   setOnboardingStep: (step: string | null) => void;
   setKycSessionId: (sessionId: string | null) => void;
+  setSessionRestored: (restored: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -30,6 +32,7 @@ export const useAuthStore = create<AuthState>()(
       driverId: null,
       isAuthenticated: false,
       needsRedirect: false,
+      sessionRestored: false,
       phone: null,
       driverStatus: null,
       onboardingStep: null,
@@ -47,6 +50,7 @@ export const useAuthStore = create<AuthState>()(
           driverId: null,
           isAuthenticated: false,
           needsRedirect: true,
+          sessionRestored: false,
           phone: null,
           driverStatus: null,
           onboardingStep: null,
@@ -57,6 +61,7 @@ export const useAuthStore = create<AuthState>()(
       setDriverStatus: (driverStatus) => set({ driverStatus }),
       setOnboardingStep: (onboardingStep) => set({ onboardingStep }),
       setKycSessionId: (kycSessionId) => set({ kycSessionId }),
+      setSessionRestored: (sessionRestored) => set({ sessionRestored }),
     }),
     {
       name: 'lifty-auth',

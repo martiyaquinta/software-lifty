@@ -93,7 +93,12 @@ export function createAuthPlugin(resolveUser?: ResolveUser) {
         }
         return { user, authStatus: 'authenticated' };
       } catch (err) {
-        logger.warn('[AUTH] getUser failed', { error: (err as Error).message });
+        const cause = err instanceof Error ? (err as Error & { cause?: unknown }).cause : undefined;
+        logger.warn('[AUTH] getUser failed', {
+          error: (err as Error).message,
+          cause: cause instanceof Error ? cause.message : cause,
+          stack: (err as Error).stack,
+        });
         return { user: null, authStatus: 'token_invalid' };
       }
     },

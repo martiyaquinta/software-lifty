@@ -2,7 +2,7 @@ import { and, eq, ne } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
 import { driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
 import { DOC_TYPES } from '../../shared/lib/documents';
-import { AppError, ConflictError, NotFoundError } from '../../shared/lib/errors';
+import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
 import { uploadFile } from '../../shared/lib/storage';
 import type { AuthUser } from '../../shared/middleware/auth';
@@ -111,7 +111,9 @@ export const driversService = {
     }
 
     // KYC gate: identity must be verified before anything else.
-    if (driver.kyc_status !== 'approved') {
+    // But NOT if the driver is still in step1 (profile) — let them
+    // complete their profile data before demanding KYC.
+    if (driver.kyc_status !== 'approved' && driver.status !== 'step1') {
       // DIDIT is still processing → keep the user on the waiting screen.
       if (driver.kyc_status === 'in_progress' || driver.kyc_status === 'under_review') {
         return { status: 'under_review', step: 'kyc', kyc_status: driver.kyc_status };
@@ -234,14 +236,30 @@ export const driversService = {
 
     if (data.phone) {
       const phone = data.phone.trim();
-      try {
-        await db.update(users).set({ phone, updated_at: new Date() }).where(eq(users.id, user.id));
-      } catch (err) {
-        // users.phone is unique — surface a friendly conflict if taken.
-        if ((err as { code?: string })?.code === '23505') {
-          throw new ConflictError('Ese numero de telefono ya esta registrado');
+
+      const [existingPhoneOwner] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.phone, phone), ne(users.id, user.id)))
+        .limit(1);
+
+      if (existingPhoneOwner) {
+        logger.warn(
+          `Phone ${phone} already belongs to user ${existingPhoneOwner.id}; skipping save for user ${user.id}`,
+        );
+      } else {
+        const [currentUser] = await db
+          .select({ phone: users.phone })
+          .from(users)
+          .where(eq(users.id, user.id))
+          .limit(1);
+
+        if (currentUser?.phone !== phone) {
+          await db
+            .update(users)
+            .set({ phone, updated_at: new Date() })
+            .where(eq(users.id, user.id));
         }
-        throw err;
       }
     }
 
