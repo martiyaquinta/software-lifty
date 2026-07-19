@@ -2,8 +2,18 @@ import { Elysia } from 'elysia';
 import { safeCall } from '../../shared/lib/route-utils';
 import type { AuthUser } from '../../shared/middleware/auth';
 import { authGuard } from '../../shared/middleware/require-auth';
+import { approveDriver } from './approve';
 import { driverIdParams, reviewBody } from './schema';
 import { adminService } from './service';
+
+export const adminApproveRoute = new Elysia().get('/admin/approve', ({ query, set }) => {
+  const token = (query as any)?.token;
+  if (!token) {
+    set.status = 400;
+    return { error: { code: 'BAD_REQUEST', message: 'Token is required', status: 400 } };
+  }
+  return safeCall(() => approveDriver(String(token)), set);
+});
 
 function isAdmin(user: AuthUser, set: { status: number }): boolean {
   if (user.role !== 'admin') {
