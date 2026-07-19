@@ -6,6 +6,7 @@ import { users } from '../../shared/db/schema/users';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
 import { sendPushToUser } from '../../shared/lib/push';
+import { notifyDriverApproved } from './notifications';
 
 export async function approveDriver(token: string): Promise<{ message: string }> {
   const [driver] = await db
@@ -49,7 +50,7 @@ export async function approveDriver(token: string): Promise<{ message: string }>
     );
 
   const [userRow] = await db
-    .select({ full_name: users.full_name })
+    .select({ full_name: users.full_name, email: users.email })
     .from(users)
     .where(eq(users.id, driver.user_id))
     .limit(1);
@@ -63,6 +64,12 @@ export async function approveDriver(token: string): Promise<{ message: string }>
   }).catch((err) => {
     logger.error('[ADMIN-APPROVE] Push failed', (err as Error).message);
   });
+
+  if (userRow?.email) {
+    notifyDriverApproved(userRow.email, userRow?.full_name ?? 'Driver').catch((err) => {
+      logger.error('[ADMIN-APPROVE] Approval email failed', (err as Error).message);
+    });
+  }
 
   return {
     message: `Conductor ${userRow?.full_name ?? driver.id} aprobado. Ya puede usar la app.`,
