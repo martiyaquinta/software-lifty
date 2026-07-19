@@ -6,7 +6,7 @@ import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
 import { uploadFile } from '../../shared/lib/storage';
 import type { AuthUser } from '../../shared/middleware/auth';
-import { notifyAdminsNewDocuments } from '../admin/notifications';
+import { notifyAdminNewDriver } from '../admin/notifications';
 
 const VALID_DOC_TYPES: readonly string[] = DOC_TYPES;
 
@@ -380,7 +380,7 @@ export const driversService = {
         .from(users)
         .where(eq(users.id, user.id))
         .limit(1);
-      notifyAdminsNewDocuments(userRow?.full_name ?? 'Driver', driver.id);
+      notifyAdminNewDriver(driver.id);
     }
 
     const result = await this.getMyStatus(user);
@@ -507,7 +507,7 @@ export const driversService = {
         .from(users)
         .where(eq(users.id, user.id))
         .limit(1);
-      notifyAdminsNewDocuments(userRow?.full_name ?? 'Driver', driver.id);
+      notifyAdminNewDriver(driver.id);
     }
 
     return {
