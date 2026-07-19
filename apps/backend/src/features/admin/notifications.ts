@@ -4,6 +4,15 @@ import { driverDocuments, drivers, users, vehicles } from '../../shared/db/schem
 import { sendEmail } from '../../shared/lib/email';
 import { logger } from '../../shared/lib/logger';
 
+function sanitize(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
 function adminEmailsFromEnv(): string[] {
   const extra = process.env.ADMIN_EMAIL;
   if (!extra) return [];
@@ -201,24 +210,24 @@ export async function notifyAdminNewDriver(driverId: string): Promise<void> {
     const approveUrl = `${apiUrl}/admin/approve?token=${token}`;
 
     const vehicleHtml = data.vehicle
-      ? `<tr><td><strong>Vehiculo</strong></td><td>${data.vehicle.brand} ${data.vehicle.model} (${data.vehicle.year}) — ${data.vehicle.color} — Patente: ${data.vehicle.plate} — Tipo: ${data.vehicle.type}</td></tr>`
+      ? `<tr><td><strong>Vehiculo</strong></td><td>${sanitize(data.vehicle.brand)} ${sanitize(data.vehicle.model)} (${data.vehicle.year}) — ${sanitize(data.vehicle.color)} — Patente: ${sanitize(data.vehicle.plate)} — Tipo: ${sanitize(data.vehicle.type)}</td></tr>`
       : '';
 
     const docsHtml = data.documents
       .map(
         (d) =>
-          `<tr><td><strong>${d.type}</strong></td><td>${d.front ? `<a href="${d.front}">Frente</a>` : '—'} ${d.back ? `| <a href="${d.back}">Dorso</a>` : ''}</td></tr>`,
+          `<tr><td><strong>${sanitize(d.type)}</strong></td><td>${d.front ? `<a href="${d.front}">Frente</a>` : '—'} ${d.back ? `| <a href="${d.back}">Dorso</a>` : ''}</td></tr>`,
       )
       .join('');
 
     const subject = `Nuevo conductor: ${data.fullName}`;
     const html = `<h2>Nuevo conductor registrado</h2>
 <table style="border-collapse:collapse;width:100%;max-width:600px">
-<tr><td style="padding:8px;border:1px solid #ddd"><strong>Nombre</strong></td><td style="padding:8px;border:1px solid #ddd">${data.fullName}</td></tr>
-<tr><td style="padding:8px;border:1px solid #ddd"><strong>Telefono</strong></td><td style="padding:8px;border:1px solid #ddd">${data.phone}</td></tr>
-<tr><td style="padding:8px;border:1px solid #ddd"><strong>Email</strong></td><td style="padding:8px;border:1px solid #ddd">${data.email ?? '—'}</td></tr>
-<tr><td style="padding:8px;border:1px solid #ddd"><strong>Verificado (DIDIT)</strong></td><td style="padding:8px;border:1px solid #ddd">${data.verifiedName ?? '—'}</td></tr>
-<tr><td style="padding:8px;border:1px solid #ddd"><strong>Estado KYC</strong></td><td style="padding:8px;border:1px solid #ddd">${data.kycStatus}</td></tr>
+<tr><td style="padding:8px;border:1px solid #ddd"><strong>Nombre</strong></td><td style="padding:8px;border:1px solid #ddd">${sanitize(data.fullName)}</td></tr>
+<tr><td style="padding:8px;border:1px solid #ddd"><strong>Telefono</strong></td><td style="padding:8px;border:1px solid #ddd">${sanitize(data.phone)}</td></tr>
+<tr><td style="padding:8px;border:1px solid #ddd"><strong>Email</strong></td><td style="padding:8px;border:1px solid #ddd">${data.email ? sanitize(data.email) : '—'}</td></tr>
+<tr><td style="padding:8px;border:1px solid #ddd"><strong>Verificado (DIDIT)</strong></td><td style="padding:8px;border:1px solid #ddd">${data.verifiedName ? sanitize(data.verifiedName) : '—'}</td></tr>
+<tr><td style="padding:8px;border:1px solid #ddd"><strong>Estado KYC</strong></td><td style="padding:8px;border:1px solid #ddd">${sanitize(data.kycStatus)}</td></tr>
 ${vehicleHtml}
 ${docsHtml}
 </table>
