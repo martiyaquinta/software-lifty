@@ -4,8 +4,10 @@ import { useState } from 'react';
 import { ActivityIndicator, StatusBar, StyleSheet, Text, View } from 'react-native';
 import WebView from 'react-native-webview/lib/WebView';
 import type { WebViewErrorEvent, WebViewNavigation } from 'react-native-webview/lib/WebViewTypes';
+import { apiClient } from '../api/client';
 import { Navbar } from '../components/Navbar';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
 
 // Must match DIDIT_CALLBACK_URL configured on the backend. DIDIT redirects the
@@ -21,6 +23,11 @@ export const KYCWebViewScreen: React.FC = () => {
   const finish = () => {
     if (done) return;
     setDone(true);
+    const sessionId = useAuthStore.getState().kycSessionId;
+    if (sessionId) {
+      apiClient.get(`/kyc/decision/${sessionId}`).catch(() => {});
+      useAuthStore.getState().setKycSessionId(null);
+    }
     navigation.navigate('OnboardingVehicle');
   };
 
