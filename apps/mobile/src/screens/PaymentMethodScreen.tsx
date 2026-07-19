@@ -47,7 +47,7 @@ export const PaymentMethodScreen: React.FC = () => {
       method_type: string;
       account_number: string;
       titular_name: string;
-      wallet: string;
+      wallet?: string;
     }) => {
       await apiClient.post('/drivers/me/payment-methods', body);
     },
@@ -92,12 +92,18 @@ export const PaymentMethodScreen: React.FC = () => {
 
   const handleAdd = () => {
     if (!isCvuValid || !alias.trim()) return;
-    addMutation.mutate({
+    const body: {
+      method_type: string;
+      account_number: string;
+      titular_name: string;
+      wallet?: string;
+    } = {
       method_type: 'cvu',
       account_number: cvu.replace(/\D/g, ''),
       titular_name: alias.trim(),
-      wallet: bank.trim(),
-    });
+    };
+    if (bank.trim()) body.wallet = bank.trim();
+    addMutation.mutate(body);
   };
 
   return (
