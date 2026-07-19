@@ -21,7 +21,7 @@ export const KYCWebViewScreen: React.FC = () => {
   const finish = () => {
     if (done) return;
     setDone(true);
-    navigation.replace('UnderReview');
+    navigation.navigate('UnderReview');
   };
 
   const handleRequest = (request: WebViewNavigation): boolean => {

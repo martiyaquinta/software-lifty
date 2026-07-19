@@ -23,6 +23,7 @@ function SessionRestore() {
       const token = data.session?.access_token ?? null;
       if (!token) {
         useAuthStore.getState().clearAuth();
+        useAuthStore.getState().setSessionRestored(true);
         return;
       }
       useAuthStore.getState().setSession(token, data.session?.user?.id ?? null);
@@ -46,6 +47,8 @@ function SessionRestore() {
         }
       } catch (err: any) {
         console.log('[SessionRestore] /auth/me ERROR:', err?.message);
+      } finally {
+        useAuthStore.getState().setSessionRestored(true);
       }
     };
     restore();

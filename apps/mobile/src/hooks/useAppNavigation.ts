@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter, useSegments } from 'expo-router';
 
 const SCREEN_TO_ROUTE = {
   Welcome: '/',
@@ -38,8 +38,16 @@ export interface ScreenParams {
   TripComplete: { amount?: string; commission?: string; driverEarnings?: string };
 }
 
+const BACK_FALLBACK: Record<string, string> = {
+  'onboarding-vehicle': 'OnboardingStep1',
+  'onboarding-step2': 'OnboardingVehicle',
+  'kyc-verify': 'OnboardingStep1',
+  'kyc-webview': 'KYCVerify',
+};
+
 export function useAppNavigation() {
   const router = useRouter();
+  const segments = useSegments();
 
   const push = (screen: string, params?: Record<string, string>) => {
     const route = SCREEN_TO_ROUTE[screen as ScreenName];
@@ -61,9 +69,24 @@ export function useAppNavigation() {
     }
   };
 
+  const goBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    const currentRoute = segments[segments.length - 1] ?? '';
+    const fallback = BACK_FALLBACK[currentRoute];
+    if (fallback) {
+      replace(fallback);
+    } else {
+      console.log('[nav] goBack blocked: nothing to go back to');
+    }
+  };
+
   return {
     navigate: push,
-    goBack: () => router.back(),
+    goBack,
     replace,
   };
 }

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { StatusBar, StyleSheet, Text, View } from 'react-native';
 import { apiClient } from '../api/client';
 import { Button } from '../components/Button';
@@ -14,14 +14,6 @@ export const KYCVerifyScreen: React.FC = () => {
   const setKycSessionId = useAuthStore((s) => s.setKycSessionId);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (driverStatus === 'approved') {
-      navigation.replace('Online');
-    } else if (driverStatus === 'under_review') {
-      navigation.replace('UnderReview');
-    }
-  }, [driverStatus]);
 
   const handleStart = async () => {
     setLoading(true);
@@ -38,31 +30,49 @@ export const KYCVerifyScreen: React.FC = () => {
     }
   };
 
-  if (driverStatus === 'approved' || driverStatus === 'under_review') {
-    return null;
-  }
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={theme.colors.deepBlue} />
       <Navbar title="Verificacion" onBack={() => navigation.goBack()} />
       <View style={styles.content}>
-        <View style={styles.iconCircle}>
-          <Text style={styles.lockIcon}>🔒</Text>
-        </View>
-        <Text style={styles.title}>Verifica tu identidad</Text>
-        <Text style={styles.description}>
-          Para garantizar la seguridad de todos, necesitamos verificar tu identidad con nuestro
-          sistema DIDIT. Vas a necesitar tu DNI y acceso a la camara.
-        </Text>
-        {error && <Text style={styles.error}>{error}</Text>}
-        <Button
-          title="COMENZAR VERIFICACION"
-          onPress={handleStart}
-          loading={loading}
-          style={styles.button}
-        />
-        <Text style={styles.footer}>Verificacion por DIDIT</Text>
+        {driverStatus === 'approved' ? (
+          <>
+            <View style={styles.iconCircle}>
+              <Text style={styles.checkIcon}>✓</Text>
+            </View>
+            <Text style={styles.title}>Identidad verificada</Text>
+            <Text style={styles.description}>Tu identidad ya fue verificada correctamente.</Text>
+          </>
+        ) : driverStatus === 'under_review' ? (
+          <>
+            <View style={styles.iconCircle}>
+              <Text style={styles.clockIcon}>⏳</Text>
+            </View>
+            <Text style={styles.title}>Verificacion en curso</Text>
+            <Text style={styles.description}>
+              DIDIT esta revisando tus datos biometricos. Te avisaremos cuando este lista.
+            </Text>
+          </>
+        ) : (
+          <>
+            <View style={styles.iconCircle}>
+              <Text style={styles.lockIcon}>🔒</Text>
+            </View>
+            <Text style={styles.title}>Verifica tu identidad</Text>
+            <Text style={styles.description}>
+              Para garantizar la seguridad de todos, necesitamos verificar tu identidad con nuestro
+              sistema DIDIT. Vas a necesitar tu DNI y acceso a la camara.
+            </Text>
+            {error && <Text style={styles.error}>{error}</Text>}
+            <Button
+              title="COMENZAR VERIFICACION"
+              onPress={handleStart}
+              loading={loading}
+              style={styles.button}
+            />
+            <Text style={styles.footer}>Verificacion por DIDIT</Text>
+          </>
+        )}
       </View>
     </View>
   );
@@ -90,6 +100,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   lockIcon: {
+    fontSize: 40,
+  },
+  checkIcon: {
+    fontSize: 40,
+    color: theme.colors.turquoise,
+  },
+  clockIcon: {
     fontSize: 40,
   },
   title: {

@@ -13,6 +13,7 @@ export function AuthRedirectWatcher() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const onboardingStep = useAuthStore((s) => s.onboardingStep);
   const driverStatus = useAuthStore((s) => s.driverStatus);
+  const sessionRestored = useAuthStore((s) => s.sessionRestored);
   const resetRedirect = useAuthStore((s) => s.resetRedirect);
   const router = useRouter();
   const segments = useSegments();
@@ -29,11 +30,8 @@ export function AuthRedirectWatcher() {
     }
   }, [needsRedirect, resetRedirect, router, segments]);
 
-  // When an authenticated user lands on a public route (app cold start, deep
-  // link, etc.), route them to their real onboarding stage — NOT blindly to the
-  // app home. This is what keeps a half-onboarded driver on the KYC gate
-  // instead of letting them slip into the app with identity unverified.
   useEffect(() => {
+    if (!sessionRestored) return;
     if (!isAuthenticated || !PUBLIC_ROUTES.includes(segments[0] ?? '')) return;
 
     const target = onboardingStep ? STEP_ROUTE[onboardingStep] : undefined;
@@ -46,7 +44,7 @@ export function AuthRedirectWatcher() {
     InteractionManager.runAfterInteractions(() => {
       replace(screen);
     });
-  }, [isAuthenticated, segments, onboardingStep, driverStatus, replace]);
+  }, [sessionRestored, isAuthenticated, segments, onboardingStep, driverStatus, replace]);
 
   return null;
 }

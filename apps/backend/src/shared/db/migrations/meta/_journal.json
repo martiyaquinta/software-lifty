@@ -155,6 +155,13 @@
       "when": 1783450000000,
       "tag": "0020_document_reupload",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1753464375000,
+      "tag": "0021_drop_auth_columns",
+      "breakpoints": true
     }
   ]
 }

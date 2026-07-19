@@ -18,6 +18,7 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Navbar } from '../components/Navbar';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { STEP_ROUTE } from '../lib/postAuthRouting';
 import { theme } from '../theme';
 import { compressImage } from '../utils/image';
 import { uploadPhotoToBackend } from '../utils/upload';
@@ -127,10 +128,15 @@ export const OnboardingStep1Screen: React.FC = () => {
         payload.photo_url = uploadedPhotoUrl;
       }
 
-      await apiClient.put('/drivers/me', payload);
+      const { data } = await apiClient.put('/drivers/me', payload);
 
-      // Identity verification is required before the vehicle/documents steps.
-      navigation.navigate('KYCVerify');
+      const step: string = data?.step ?? 'kyc';
+      const target = STEP_ROUTE[step];
+      if (target) {
+        navigation.replace(target.screen);
+      } else {
+        navigation.navigate('KYCVerify');
+      }
     } catch (err: any) {
       setSubmitError(err?.message ?? 'Error al guardar los datos');
     } finally {

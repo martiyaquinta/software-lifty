@@ -229,7 +229,7 @@ export const OnboardingStep2Screen: React.FC = () => {
   }, []);
 
   const handleVerify = useCallback(() => {
-    navigation.replace('UnderReview');
+    navigation.navigate('UnderReview');
   }, [navigation]);
 
   return (
