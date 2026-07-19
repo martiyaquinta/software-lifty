@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { InteractionManager } from 'react-native';
+import { InteractionManager, Platform } from 'react-native';
 import { apiClient } from '../api/client';
 import { driverStatusSchema } from '../api/types';
 import { useAppNavigation } from '../hooks/useAppNavigation';
@@ -125,9 +125,21 @@ function NotificationSetup() {
   useEffect(() => {
     setupNotificationHandler();
 
-    registerForPush().then((token) => {
+    registerForPush().then(async (token) => {
       if (token) {
-        console.log('Expo push token:', token);
+        try {
+          const { default: axios } = await import('axios');
+          const Constants = (await import('expo-constants')).default;
+          const hostUri = Constants.expoConfig?.hostUri;
+          const port = process.env.EXPO_PUBLIC_API_PORT ?? '3000';
+          const host = hostUri?.split(':')[0] ?? 'localhost';
+          await axios.post(`http://${host}:${port}/api/notifications/token`, {
+            token,
+            platform: Platform.OS,
+          });
+        } catch {
+          // Silently fail — token registration is best-effort
+        }
       }
     });
 
