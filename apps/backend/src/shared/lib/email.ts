@@ -18,7 +18,7 @@ function getClient(): any {
 }
 
 export async function sendEmail(email: string, subject: string, html: string): Promise<boolean> {
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' && process.env.SEND_EMAILS_IN_DEV !== 'true') {
     logger.info('[EMAIL]', email, '|', subject);
     return true;
   }
@@ -30,12 +30,24 @@ export async function sendEmail(email: string, subject: string, html: string): P
   }
 
   try {
-    await client.emails.send({
-      from: process.env.EMAIL_FROM ?? 'Lifty <noreply@lifty.app>',
+    const result = await client.emails.send({
+      from: process.env.EMAIL_FROM ?? 'Lifty <noreply@liftyviajes.com>',
       to: email,
       subject,
       html,
     });
+
+    if (result.error) {
+      logger.error(
+        '[EMAIL] Resend error to',
+        email,
+        ':',
+        result.error.statusCode,
+        result.error.message,
+      );
+      return false;
+    }
+
     logger.info('[EMAIL] Sent to', email);
     return true;
   } catch (err) {
