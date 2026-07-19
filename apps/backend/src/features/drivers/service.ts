@@ -375,11 +375,6 @@ export const driversService = {
         .set({ status: 'review', admin_review_status: 'pending', updated_at: new Date() })
         .where(eq(drivers.id, driver.id));
 
-      const [userRow] = await db
-        .select({ full_name: users.full_name })
-        .from(users)
-        .where(eq(users.id, user.id))
-        .limit(1);
       notifyAdminNewDriver(driver.id);
     }
 
@@ -502,11 +497,6 @@ export const driversService = {
         docType,
       });
 
-      const [userRow] = await db
-        .select({ full_name: users.full_name })
-        .from(users)
-        .where(eq(users.id, user.id))
-        .limit(1);
       notifyAdminNewDriver(driver.id);
     }
 
