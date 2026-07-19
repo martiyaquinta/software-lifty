@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import type React from 'react';
 import { useCallback, useState } from 'react';
@@ -20,12 +19,12 @@ import { STEP_ROUTE } from '../lib/postAuthRouting';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
 import { compressImage } from '../utils/image';
-import { type DocBase, type DocSide, uploadDocumentToBackend } from '../utils/upload';
+import { DOC_SIDES, type DocBase, type DocSide, uploadDocumentToBackend } from '../utils/upload';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 type DocType = DocBase;
-type PickMethod = 'camera' | 'gallery' | 'file';
+type PickMethod = 'camera' | 'gallery';
 
 const DOCS: { type: DocType; label: string }[] = [
   { type: 'drivers_license', label: 'Licencia de conducir' },
@@ -34,10 +33,7 @@ const DOCS: { type: DocType; label: string }[] = [
   { type: 'background_check', label: 'Certificado de antecedentes penales' },
 ];
 
-const SIDES: { side: DocSide; label: string }[] = [
-  { side: 'front', label: 'Frente' },
-  { side: 'back', label: 'Dorso' },
-];
+const SIDE_LABELS: Record<DocSide, string> = { front: 'Frente', back: 'Dorso' };
 
 interface DocState {
   fileUri: string | null;
@@ -74,7 +70,9 @@ export const OnboardingStep2Screen: React.FC = () => {
     background_check: initialSideState(),
   });
 
-  const allUploaded = Object.values(docs).every((d) => d.front.uploaded && d.back.uploaded);
+  const allUploaded = Object.entries(docs).every(([docType, doc]) =>
+    DOC_SIDES[docType as DocType].every((side) => doc[side].uploaded),
+  );
 
   const handlePick = useCallback(
     async (docType: DocType, side: DocSide, method: PickMethod) => {
@@ -120,7 +118,7 @@ export const OnboardingStep2Screen: React.FC = () => {
           name = asset.fileName ?? `photo_${Date.now()}.jpg`;
           mimeType = asset.mimeType ?? 'image/jpeg';
           fileSize = asset.fileSize ?? null;
-        } else if (method === 'gallery') {
+        } else {
           const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: 'images',
             quality: 0.7,
@@ -131,17 +129,6 @@ export const OnboardingStep2Screen: React.FC = () => {
           name = asset.fileName ?? `image_${Date.now()}.jpg`;
           mimeType = asset.mimeType ?? 'image/jpeg';
           fileSize = asset.fileSize ?? null;
-        } else {
-          const result = await DocumentPicker.getDocumentAsync({
-            type: '*/*',
-            copyToCacheDirectory: true,
-          });
-          if (result.canceled || !result.assets?.[0]) return;
-          const asset = result.assets[0];
-          uri = asset.uri;
-          name = asset.name;
-          mimeType = asset.mimeType ?? 'application/octet-stream';
-          fileSize = asset.size ?? null;
         }
 
         if (fileSize && fileSize > MAX_FILE_SIZE) {
@@ -155,24 +142,13 @@ export const OnboardingStep2Screen: React.FC = () => {
           return;
         }
 
-        if (method === 'camera' || method === 'gallery') {
-          try {
-            const compressed = await compressImage(uri!);
-            uri = compressed.uri;
-            name = name?.replace(/\.[^.]+$/, '.jpg') ?? `photo_${Date.now()}.jpg`;
-            mimeType = 'image/jpeg';
-          } catch (err) {
-            console.warn('Image compression failed, using original:', err);
-          }
-        } else if (mimeType?.startsWith('image/') && uri) {
-          try {
-            const compressed = await compressImage(uri);
-            uri = compressed.uri;
-            name = name?.replace(/\.[^.]+$/, '.jpg') ?? `doc_${Date.now()}.jpg`;
-            mimeType = 'image/jpeg';
-          } catch (err) {
-            console.warn('Image compression failed, using original:', err);
-          }
+        try {
+          const compressed = await compressImage(uri!);
+          uri = compressed.uri;
+          name = name?.replace(/\.[^.]+$/, '.jpg') ?? `photo_${Date.now()}.jpg`;
+          mimeType = 'image/jpeg';
+        } catch (err) {
+          console.warn('Image compression failed, using original:', err);
         }
 
         setDocs((prev) => ({
@@ -259,8 +235,9 @@ export const OnboardingStep2Screen: React.FC = () => {
             </View>
             <Text style={styles.uploadTitle}>{doc.label}</Text>
 
-            {SIDES.map(({ side, label }) => {
+            {DOC_SIDES[doc.type].map((side) => {
               const state = docs[doc.type][side];
+              const label = SIDE_LABELS[side];
               return (
                 <View key={side} style={styles.sideBlock}>
                   <Text style={styles.sideLabel}>{label}</Text>
@@ -294,13 +271,6 @@ export const OnboardingStep2Screen: React.FC = () => {
                         activeOpacity={0.7}
                       >
                         <Text style={styles.optionText}>Subir de galeria</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.uploadOption}
-                        onPress={() => handlePick(doc.type, side, 'file')}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.optionText}>Subir archivo</Text>
                       </TouchableOpacity>
                     </View>
                   )}

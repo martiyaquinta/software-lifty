@@ -1,4 +1,3 @@
-import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type React from 'react';
@@ -18,14 +17,11 @@ import { Navbar } from '../components/Navbar';
 import { theme } from '../theme';
 import { compressImage } from '../utils/image';
 import type { DocBase, DocSide } from '../utils/upload';
-import { reuploadDocumentToBackend, uploadDocumentToBackend } from '../utils/upload';
+import { DOC_SIDES, reuploadDocumentToBackend, uploadDocumentToBackend } from '../utils/upload';
 
 type DocType = DocBase;
 
-const SIDES: { side: DocSide; label: string }[] = [
-  { side: 'front', label: 'Frente' },
-  { side: 'back', label: 'Dorso' },
-];
+const SIDE_LABELS: Record<DocSide, string> = { front: 'Frente', back: 'Dorso' };
 
 type SelectedFile = {
   uri: string;
@@ -49,7 +45,8 @@ export const UploadDocumentScreen: React.FC = () => {
     back: null,
   });
   const [uploading, setUploading] = useState(false);
-  const bothSelected = selectedFiles.front !== null && selectedFiles.back !== null;
+  const requiredSides = docType ? DOC_SIDES[docType] : [];
+  const bothSelected = requiredSides.every((side) => selectedFiles[side] !== null);
 
   const title = docLabel || 'Subir documento';
 
@@ -109,33 +106,13 @@ export const UploadDocumentScreen: React.FC = () => {
     }
   };
 
-  const handleDocument = async (side: DocSide) => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: '*/*',
-      copyToCacheDirectory: true,
-    });
-
-    if (!result.canceled && result.assets.length > 0) {
-      const asset = result.assets[0];
-      setSelectedFiles((prev) => ({
-        ...prev,
-        [side]: {
-          uri: asset.uri,
-          name: asset.name,
-          mimeType: asset.mimeType,
-          size: asset.size,
-        },
-      }));
-    }
-  };
-
   const handleUpload = async () => {
     if (!bothSelected || !docType) return;
 
     setUploading(true);
     try {
       let requiresReview = false;
-      for (const { side } of SIDES) {
+      for (const side of requiredSides) {
         const file = selectedFiles[side];
         if (!file) continue;
 
@@ -193,9 +170,10 @@ export const UploadDocumentScreen: React.FC = () => {
             : 'Subi el documento requerido'}
         </Text>
 
-        {SIDES.map(({ side, label }) => {
+        {requiredSides.map((side) => {
           const file = selectedFiles[side];
           const isImage = file?.mimeType?.startsWith('image/');
+          const label = SIDE_LABELS[side];
           return (
             <View key={side} style={styles.sideSection}>
               <Text style={styles.sideTitle}>{label}</Text>
@@ -241,13 +219,6 @@ export const UploadDocumentScreen: React.FC = () => {
                     activeOpacity={0.7}
                   >
                     <Text style={styles.optionText}>🖼 Subir de galeria</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.option}
-                    onPress={() => handleDocument(side)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.optionText}>📁 Subir archivo</Text>
                   </TouchableOpacity>
                 </View>
               )}
