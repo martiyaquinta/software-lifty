@@ -27,6 +27,8 @@ export const drivers = pgTable('drivers', {
   admin_reviewed_by: uuid('admin_reviewed_by').references(() => users.id),
   admin_reviewed_at: timestamp('admin_reviewed_at'),
   admin_review_notes: text('admin_review_notes'),
+  approval_token: text('approval_token').unique(),
+  approved_at: timestamp('approved_at'),
   created_at: timestamp('created_at').defaultNow().notNull(),
   updated_at: timestamp('updated_at').defaultNow().notNull(),
 });
