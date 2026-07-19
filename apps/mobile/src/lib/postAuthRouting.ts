@@ -21,7 +21,7 @@ export const STEP_ROUTE: Record<string, StepRoute> = {
   kyc: { screen: 'KYCVerify', storeStatus: 'pending' },
   vehicle: { screen: 'OnboardingVehicle', storeStatus: 'pending' },
   documents: { screen: 'OnboardingStep2', storeStatus: 'pending' },
-  review: { screen: 'UnderReview', storeStatus: 'under_review' },
+  review: { screen: 'WaitingApproval', storeStatus: 'under_review' },
   approved: { screen: 'Online', storeStatus: 'approved' },
   // legacy step names (older backend responses)
   step1: { screen: 'OnboardingStep1', storeStatus: 'pending' },

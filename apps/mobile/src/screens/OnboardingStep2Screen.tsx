@@ -236,7 +236,7 @@ export const OnboardingStep2Screen: React.FC = () => {
   }, []);
 
   const handleVerify = useCallback(() => {
-    navigation.navigate('UnderReview');
+    navigation.navigate('WaitingApproval');
   }, [navigation]);
 
   return (

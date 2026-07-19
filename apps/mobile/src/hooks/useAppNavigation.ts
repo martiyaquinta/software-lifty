@@ -18,6 +18,7 @@ const SCREEN_TO_ROUTE = {
   DNIScan: '/dni-scan',
   Selfie: '/selfie',
   UnderReview: '/under-review',
+  WaitingApproval: '/waiting-approval',
   Online: '/online',
   Active: '/active',
   IncomingRequest: '/incoming-request',
@@ -43,6 +44,7 @@ const BACK_FALLBACK: Record<string, string> = {
   'onboarding-step2': 'OnboardingVehicle',
   'kyc-verify': 'OnboardingStep1',
   'kyc-webview': 'KYCVerify',
+  'waiting-approval': 'OnboardingStep2',
 };
 
 export function useAppNavigation() {
