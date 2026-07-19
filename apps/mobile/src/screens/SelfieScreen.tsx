@@ -28,7 +28,7 @@ export const SelfieScreen: React.FC = () => {
       <Button
         title="Simular selfie exitoso"
         variant="primary"
-        onPress={() => navigation.navigate('UnderReview')}
+        onPress={() => navigation.navigate('WaitingApproval')}
         style={styles.button}
       />
       <Text style={styles.brand}>Verificacion por DIDIT</Text>

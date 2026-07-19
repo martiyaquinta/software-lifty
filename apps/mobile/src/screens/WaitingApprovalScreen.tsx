@@ -18,8 +18,8 @@ export const WaitingApprovalScreen: React.FC = () => {
         </View>
         <Text style={styles.title}>Tus datos fueron enviados</Text>
         <Text style={styles.subtitle}>
-          Un administrador revisara tu informacion y documentos. Te notificaremos cuando tu cuenta
-          este aprobada.
+          Un administrador revisará tu información y documentos. Te notificaremos cuando tu cuenta
+          esté aprobada.
         </Text>
       </View>
       <Button

@@ -56,7 +56,7 @@ export function routeForDriverStatus(driverData: DriverStatus): {
   if (byStep) return { screen: byStep.screen, status: byStep.storeStatus };
 
   if (status === 'approved') return { screen: 'Online', status: 'approved' };
-  if (status === 'under_review') return { screen: 'UnderReview', status: 'under_review' };
+  if (status === 'under_review') return { screen: 'WaitingApproval', status: 'under_review' };
 
   return { screen: 'OnboardingStep1', status: 'pending' };
 }
