@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { InteractionManager } from 'react-native';
+import { InteractionManager, Platform } from 'react-native';
 import { apiClient } from '../api/client';
 import { driverStatusSchema } from '../api/types';
 import { useAppNavigation } from '../hooks/useAppNavigation';
@@ -126,9 +126,17 @@ function NotificationSetup() {
     setupNotificationHandler();
 
     registerForPush().then((token) => {
-      if (token) {
-        console.log('Expo push token:', token);
-      }
+      if (!token) return;
+      const { token: authToken, sessionRestored } = useAuthStore.getState();
+      if (!authToken || !sessionRestored) return;
+      apiClient
+        .post('/notifications/token', {
+          token,
+          platform: Platform.OS,
+        })
+        .catch(() => {
+          // best-effort
+        });
     });
 
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {

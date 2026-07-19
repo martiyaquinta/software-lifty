@@ -61,7 +61,7 @@ export function handleNotificationResponse(
       navigate('Online');
       break;
     case 'kyc:rejected':
-      navigate('UnderReview');
+      navigate('WaitingApproval');
       break;
     case 'payment:deposited':
       navigate('Earnings');

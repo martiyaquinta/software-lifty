@@ -21,7 +21,7 @@ export const STEP_ROUTE: Record<string, StepRoute> = {
   kyc: { screen: 'KYCVerify', storeStatus: 'pending' },
   vehicle: { screen: 'OnboardingVehicle', storeStatus: 'pending' },
   documents: { screen: 'OnboardingStep2', storeStatus: 'pending' },
-  review: { screen: 'UnderReview', storeStatus: 'under_review' },
+  review: { screen: 'WaitingApproval', storeStatus: 'under_review' },
   approved: { screen: 'Online', storeStatus: 'approved' },
   // legacy step names (older backend responses)
   step1: { screen: 'OnboardingStep1', storeStatus: 'pending' },
@@ -56,7 +56,7 @@ export function routeForDriverStatus(driverData: DriverStatus): {
   if (byStep) return { screen: byStep.screen, status: byStep.storeStatus };
 
   if (status === 'approved') return { screen: 'Online', status: 'approved' };
-  if (status === 'under_review') return { screen: 'UnderReview', status: 'under_review' };
+  if (status === 'under_review') return { screen: 'WaitingApproval', status: 'under_review' };
 
   return { screen: 'OnboardingStep1', status: 'pending' };
 }
