@@ -7,6 +7,13 @@ export type DocBase =
   | 'background_check';
 export type DocSide = 'front' | 'back';
 
+export const DOC_SIDES: Record<DocBase, DocSide[]> = {
+  drivers_license: ['front', 'back'],
+  vehicle_registration: ['front', 'back'],
+  vehicle_insurance: ['front', 'back'],
+  background_check: ['front'],
+};
+
 const DOC_BASE_MAP: Record<DocBase, string> = {
   drivers_license: 'license',
   vehicle_registration: 'registration',
