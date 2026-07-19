@@ -270,6 +270,15 @@ export const driversService = {
         .where(eq(users.id, user.id));
     }
 
+    // After saving profile data, advance from 'step1' so the KYC gate in
+    // getMyStatus will route to 'kyc' instead of 'vehicle' prematurely.
+    if (existing && existing.status === 'step1') {
+      await db
+        .update(drivers)
+        .set({ status: 'pending', updated_at: new Date() })
+        .where(eq(drivers.id, driverId));
+    }
+
     const hasVehicleData =
       data.vehicle_brand ||
       data.vehicle_model ||

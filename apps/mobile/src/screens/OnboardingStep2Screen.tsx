@@ -12,9 +12,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { ApiError } from '../api/types';
 import { Button } from '../components/Button';
 import { Navbar } from '../components/Navbar';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { STEP_ROUTE } from '../lib/postAuthRouting';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
 import { compressImage } from '../utils/image';
@@ -203,6 +205,11 @@ export const OnboardingStep2Screen: React.FC = () => {
           },
         }));
       } catch (err: unknown) {
+        if (err instanceof ApiError && err.code === 'KYC_REQUIRED') {
+          const kycRoute = STEP_ROUTE.kyc;
+          if (kycRoute) navigation.replace(kycRoute.screen);
+          return;
+        }
         const message = err instanceof Error ? err.message : 'Error al subir el documento';
         setDocs((prev) => ({
           ...prev,
@@ -218,7 +225,7 @@ export const OnboardingStep2Screen: React.FC = () => {
         }));
       }
     },
-    [driverId],
+    [driverId, navigation],
   );
 
   const handleRetry = useCallback((docType: DocType, side: DocSide) => {

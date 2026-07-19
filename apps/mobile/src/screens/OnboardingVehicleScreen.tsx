@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { apiClient } from '../api/client';
+import { ApiError } from '../api/types';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Navbar } from '../components/Navbar';
@@ -113,6 +114,11 @@ export const OnboardingVehicleScreen: React.FC = () => {
         navigation.navigate('OnboardingStep2');
       }
     } catch (err: any) {
+      if (err instanceof ApiError && err.code === 'KYC_REQUIRED') {
+        const kycRoute = STEP_ROUTE.kyc;
+        if (kycRoute) navigation.replace(kycRoute.screen);
+        return;
+      }
       setSubmitError(err?.message ?? 'Error al guardar el vehiculo');
     } finally {
       setLoading(false);

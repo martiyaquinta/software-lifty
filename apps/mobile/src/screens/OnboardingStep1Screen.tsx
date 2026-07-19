@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -73,6 +73,40 @@ export const OnboardingStep1Screen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [submitError, setSubmitError] = useState('');
+  const profileLoaded = useRef(false);
+
+  useEffect(() => {
+    if (profileLoaded.current) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data } = await apiClient.get('/drivers/me');
+        if (cancelled || !data?.full_name) return;
+
+        const nameParts = (data.full_name as string).split(' ');
+        const fn = nameParts[0] ?? '';
+        const ln = nameParts.slice(1).join(' ') ?? '';
+
+        const phone: string = data.phone ?? '';
+        const digits = phone.startsWith('+54')
+          ? phone.slice(3).replace(/\D/g, '')
+          : phone.replace(/\D/g, '');
+
+        setFirstName(fn);
+        setLastName(ln);
+        if (digits) setPhoneDigits(digits);
+        if (data.avatar_url) setPhotoUri(data.avatar_url as string);
+        profileLoaded.current = true;
+      } catch {
+        // Silently ignore — the form stays empty, user fills it manually
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const setError = (field: keyof ValidationErrors, error: string | undefined) => {
     setErrors((prev) => ({ ...prev, [field]: error }));
