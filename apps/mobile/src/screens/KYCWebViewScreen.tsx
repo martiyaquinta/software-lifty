@@ -3,14 +3,14 @@ import type React from 'react';
 import { useState } from 'react';
 import { ActivityIndicator, StatusBar, StyleSheet, Text, View } from 'react-native';
 import WebView from 'react-native-webview/lib/WebView';
-import type { WebViewNavigation } from 'react-native-webview/lib/WebViewTypes';
+import type { WebViewErrorEvent, WebViewNavigation } from 'react-native-webview/lib/WebViewTypes';
 import { Navbar } from '../components/Navbar';
 import { useAppNavigation } from '../hooks/useAppNavigation';
 import { theme } from '../theme';
 
 // Must match DIDIT_CALLBACK_URL configured on the backend. DIDIT redirects the
 // hosted flow here (with ?status=&verificationSessionId=) when it finishes.
-const CALLBACK_PREFIX = 'https://lifty.app/kyc/callback';
+const CALLBACK_PREFIX = 'https://liftyviajes.com/kyc/callback';
 
 export const KYCWebViewScreen: React.FC = () => {
   const navigation = useAppNavigation();
@@ -21,7 +21,7 @@ export const KYCWebViewScreen: React.FC = () => {
   const finish = () => {
     if (done) return;
     setDone(true);
-    navigation.navigate('UnderReview');
+    navigation.navigate('OnboardingVehicle');
   };
 
   const handleRequest = (request: WebViewNavigation): boolean => {
@@ -30,6 +30,14 @@ export const KYCWebViewScreen: React.FC = () => {
       return false;
     }
     return true;
+  };
+
+  const handleError = (e: WebViewErrorEvent) => {
+    const { url: errorUrl, description } = e.nativeEvent;
+    const desc = description ?? '';
+    if (errorUrl?.startsWith(CALLBACK_PREFIX) || desc.includes('liftyviajes')) {
+      finish();
+    }
   };
 
   if (!url) {
@@ -53,6 +61,7 @@ export const KYCWebViewScreen: React.FC = () => {
         onNavigationStateChange={(navState) => {
           if (navState.url.startsWith(CALLBACK_PREFIX)) finish();
         }}
+        onError={handleError}
         onLoadEnd={() => setLoading(false)}
         javaScriptEnabled
         domStorageEnabled
