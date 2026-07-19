@@ -125,22 +125,18 @@ function NotificationSetup() {
   useEffect(() => {
     setupNotificationHandler();
 
-    registerForPush().then(async (token) => {
-      if (token) {
-        try {
-          const { default: axios } = await import('axios');
-          const Constants = (await import('expo-constants')).default;
-          const hostUri = Constants.expoConfig?.hostUri;
-          const port = process.env.EXPO_PUBLIC_API_PORT ?? '3000';
-          const host = hostUri?.split(':')[0] ?? 'localhost';
-          await axios.post(`http://${host}:${port}/api/notifications/token`, {
-            token,
-            platform: Platform.OS,
-          });
-        } catch {
-          // Silently fail — token registration is best-effort
-        }
-      }
+    registerForPush().then((token) => {
+      if (!token) return;
+      const { token: authToken, sessionRestored } = useAuthStore.getState();
+      if (!authToken || !sessionRestored) return;
+      apiClient
+        .post('/notifications/token', {
+          token,
+          platform: Platform.OS,
+        })
+        .catch(() => {
+          // best-effort
+        });
     });
 
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
