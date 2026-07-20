@@ -126,14 +126,16 @@ export const TripInProgressScreen: React.FC = () => {
         <TouchableOpacity
           onPress={() => {
             if (!trip) return;
-            const url =
-              Platform.OS === 'ios'
-                ? `waze://?ll=${trip.dest_lat},${trip.dest_lng}&navigate=yes`
-                : `https://waze.com/ul?ll=${trip.dest_lat},${trip.dest_lng}&navigate=yes`;
-            Linking.openURL(url).catch(() => {});
+            const destLabel = encodeURIComponent(trip.dest_address ?? 'Destino');
+            const url = Platform.select({
+              ios: `maps://app?daddr=${trip.dest_lat},${trip.dest_lng}&dirflg=d`,
+              android: `geo:0,0?q=${trip.dest_lat},${trip.dest_lng}(${destLabel})`,
+              default: `https://www.google.com/maps/dir/?api=1&destination=${trip.dest_lat},${trip.dest_lng}`,
+            });
+            Linking.openURL(url!).catch(() => {});
           }}
         >
-          <Text style={styles.wazeLink}>Abrir en Waze</Text>
+          <Text style={styles.mapsLink}>Abrir en Maps</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -196,7 +198,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginTop: theme.spacing.sm,
   },
-  wazeLink: {
+  mapsLink: {
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
     color: theme.colors.mediumGray,
