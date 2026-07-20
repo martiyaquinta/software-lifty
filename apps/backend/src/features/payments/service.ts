@@ -19,14 +19,45 @@ export const paymentsService = {
 
     const totalAmount = paymentInfo.amount;
     const platformAmount = calculatePlatformFee(totalAmount);
-    const driverAmount = totalAmount - platformAmount;
+    let driverAmount = totalAmount - platformAmount;
+
+    const [trip] = await db
+      .select({ driver_id: trips.driver_id })
+      .from(trips)
+      .where(eq(trips.id, body.trip_id))
+      .limit(1);
+
+    if (trip) {
+      const [driver] = await db
+        .select({ platform_debt: drivers.platform_debt })
+        .from(drivers)
+        .where(eq(drivers.id, trip.driver_id))
+        .limit(1);
+
+      if (driver && driver.platform_debt > 0) {
+        const debtPayment = Math.min(driver.platform_debt, driverAmount);
+        driverAmount -= debtPayment;
+        await db
+          .update(drivers)
+          .set({
+            platform_debt: sql`${drivers.platform_debt} - ${debtPayment}`,
+            updated_at: new Date(),
+          })
+          .where(eq(drivers.id, trip.driver_id));
+        logger.info('[PAYMENTS] Platform debt settled', {
+          driverId: trip.driver_id,
+          debtPayment,
+          remainingDebt: driver.platform_debt - debtPayment,
+        });
+      }
+    }
 
     await db
       .insert(payments)
       .values({
         trip_id: body.trip_id,
         amount: totalAmount,
-        platform_amount: platformAmount,
+        platform_amount: totalAmount - driverAmount,
         driver_amount: driverAmount,
         mp_payment_id: body.payment_id,
         status: paymentInfo.status,
@@ -101,6 +132,12 @@ export const paymentsService = {
         .where(eq(trips.driver_id, driverId))
         .for('update');
 
+      await tx
+        .select({ id: drivers.id })
+        .from(drivers)
+        .where(eq(drivers.id, driverId))
+        .for('update');
+
       const [earningsRow] = await tx
         .select({ total: sum(payments.driver_amount) })
         .from(payments)
@@ -116,10 +153,23 @@ export const paymentsService = {
 
       const totalWithdrawn = withdrawnRow?.total ?? 0;
 
-      const availableBalance = Number(totalEarnings) - Number(totalWithdrawn);
+      const [driver] = await tx
+        .select({ platform_debt: drivers.platform_debt })
+        .from(drivers)
+        .where(eq(drivers.id, driverId))
+        .limit(1);
+
+      const platformDebt = driver?.platform_debt ?? 0;
+
+      const availableBalance =
+        Number(totalEarnings) - Number(totalWithdrawn) - Number(platformDebt);
 
       if (availableBalance < amount) {
-        throw new AppError('Insufficient balance', 400, 'BAD_REQUEST');
+        throw new AppError(
+          `Insufficient balance. Available: $${availableBalance}, Debt: $${platformDebt}`,
+          400,
+          'BAD_REQUEST',
+        );
       }
 
       return tx

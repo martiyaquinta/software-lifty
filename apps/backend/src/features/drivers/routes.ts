@@ -51,6 +51,14 @@ export const driversRoutes = new Elysia({ prefix: '/drivers' })
     { body: toggleOnlineBody, requireAuth: true },
   )
   .put(
+    '/me/heartbeat',
+    ({ set }) => {
+      set.status = 200;
+      return { ok: true };
+    },
+    { requireAuth: true },
+  )
+  .put(
     '/me',
     ({ user, body, set }) => safeCall(() => driversService.updateProfile(user, body), set),
     { body: updateProfileBody, requireAuth: true },

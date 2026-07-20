@@ -1,5 +1,6 @@
 import {
   boolean,
+  doublePrecision,
   integer,
   pgTable,
   real,
@@ -29,6 +30,7 @@ export const drivers = pgTable('drivers', {
   admin_review_notes: text('admin_review_notes'),
   approval_token: text('approval_token').unique(),
   approved_at: timestamp('approved_at'),
+  platform_debt: doublePrecision('platform_debt').default(0).notNull(),
   created_at: timestamp('created_at').defaultNow().notNull(),
   updated_at: timestamp('updated_at').defaultNow().notNull(),
 });

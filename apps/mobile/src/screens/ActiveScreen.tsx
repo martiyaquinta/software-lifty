@@ -48,8 +48,18 @@ export const ActiveScreen: React.FC = () => {
       navigation.navigate('IncomingRequest');
     });
 
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data } = await apiClient.get('/trips/active');
+        if (data && data.status === 'request_received') {
+          navigation.navigate('IncomingRequest');
+        }
+      } catch {}
+    }, 5_000);
+
     return () => {
       unsubscribe();
+      clearInterval(pollInterval);
     };
   }, [driverId, navigation]);
 
