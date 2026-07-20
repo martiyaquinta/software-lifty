@@ -12,6 +12,7 @@ import { apiClient } from '../api/client';
 import { Button } from '../components/Button';
 import { MapView } from '../components/MapView';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { startTracking, stopTracking } from '../lib/location';
 import { decodePolyline } from '../lib/polyline';
 import { useLocationStore } from '../store/locationStore';
 import { useTripStore } from '../store/tripStore';
@@ -47,8 +48,17 @@ export const TripInProgressScreen: React.FC = () => {
       if (!totalDistKmRef.current && data.distance_km) totalDistKmRef.current = data.distance_km;
       const coords = decodePolyline(data.polyline);
       setRouteCoords(coords);
-    } catch {}
+    } catch (err) {
+      if (__DEV__) console.warn('[TripInProgress] fetchDirections failed:', err);
+    }
   }, [locationLat, locationLng, trip]);
+
+  useEffect(() => {
+    startTracking();
+    return () => {
+      stopTracking();
+    };
+  }, []);
 
   useEffect(() => {
     fetchDirections();
@@ -81,12 +91,14 @@ export const TripInProgressScreen: React.FC = () => {
   };
 
   const progress =
-    totalDistKmRef.current && distKm
+    totalDistKmRef.current && distKm !== null
       ? Math.min(
           100,
           Math.max(0, ((totalDistKmRef.current - distKm) / totalDistKmRef.current) * 100),
         )
-      : 55;
+      : trip?.distance_km
+        ? 0
+        : 55;
 
   return (
     <View style={styles.container}>
