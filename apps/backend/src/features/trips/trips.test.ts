@@ -76,6 +76,9 @@ describe('Trip State Machine', () => {
         origin_lng: -65.0,
         dest_lat: -31.88,
         dest_lng: -65.02,
+        vehicle_type: 'car',
+        distance_km: 5,
+        duration_minutes: 15,
       },
       token,
     );
@@ -107,7 +110,7 @@ describe('Trip State Machine', () => {
     const { data: trip } = await request(
       'POST',
       '/api/trips',
-      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02 },
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
       token,
     );
 
@@ -135,7 +138,7 @@ describe('Trip State Machine', () => {
     const { data: trip } = await request(
       'POST',
       '/api/trips',
-      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02 },
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
       token,
     );
 
@@ -165,7 +168,7 @@ describe('Trip State Machine', () => {
     const { data: trip } = await request(
       'POST',
       '/api/trips',
-      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02 },
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
       token,
     );
 
@@ -195,7 +198,7 @@ describe('Trip State Machine', () => {
     const { data: trip } = await request(
       'POST',
       '/api/trips',
-      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02 },
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
       token,
     );
 
@@ -222,7 +225,7 @@ describe('Trip State Machine', () => {
     const { data: trip } = await request(
       'POST',
       '/api/trips',
-      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02 },
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
       token,
     );
 
@@ -255,7 +258,7 @@ describe('Trip State Machine', () => {
     const { data: trip } = await request(
       'POST',
       '/api/trips',
-      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02 },
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
       token,
     );
 
@@ -284,7 +287,7 @@ describe('Trip State Machine', () => {
     const { data: trip } = await request(
       'POST',
       '/api/trips',
-      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02 },
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
       token,
     );
 
@@ -320,7 +323,7 @@ describe('Trip State Machine', () => {
     const { data: trip } = await request(
       'POST',
       '/api/trips',
-      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02 },
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
       token,
     );
 
@@ -342,7 +345,7 @@ describe('Trip State Machine', () => {
       await request(
         'POST',
         '/api/trips',
-        { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02 },
+        { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
         token,
       );
     }
@@ -367,7 +370,7 @@ describe('Trip State Machine', () => {
     const { data: trip } = await request(
       'POST',
       '/api/trips',
-      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02 },
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
       token,
     );
 
@@ -386,7 +389,7 @@ describe('Trip State Machine', () => {
     const { data: trip } = await request(
       'POST',
       '/api/trips',
-      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02 },
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
       token,
     );
 

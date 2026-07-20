@@ -14,6 +14,12 @@ export const earningsService = {
   async getDaily(user: AuthUser) {
     const driverId = await getDriverId(user);
 
+    const [driver] = await db
+      .select({ platform_debt: drivers.platform_debt })
+      .from(drivers)
+      .where(eq(drivers.id, driverId))
+      .limit(1);
+
     const todayTrips = await db
       .select()
       .from(trips)
@@ -66,11 +72,18 @@ export const earningsService = {
       trips: todayTrips,
       yesterday: Number(yesterdayResult?.total ?? 0),
       week: Number(weekResult?.total ?? 0),
+      platform_debt: Number(driver?.platform_debt ?? 0),
     };
   },
 
   async getSummary(user: AuthUser) {
     const driverId = await getDriverId(user);
+
+    const [driver] = await db
+      .select({ platform_debt: drivers.platform_debt })
+      .from(drivers)
+      .where(eq(drivers.id, driverId))
+      .limit(1);
 
     const [todayEarnings] = await db
       .select({ total: sum(payments.driver_amount) })
@@ -130,6 +143,7 @@ export const earningsService = {
         withdrawals: Number(monthWithdrawals?.total ?? 0),
       },
       available_balance: Number(totalEarnings?.total ?? 0) - Number(totalWithdrawals?.total ?? 0),
+      platform_debt: Number(driver?.platform_debt ?? 0),
     };
   },
 

@@ -119,6 +119,7 @@ export const earningsDailySchema = z.object({
   trips: z.array(tripSchema).optional(),
   yesterday: z.number().optional(),
   week: z.number().optional(),
+  platform_debt: z.number().optional(),
 });
 
 export const paymentMethodSchema = z.object({
