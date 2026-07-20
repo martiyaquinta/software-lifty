@@ -75,7 +75,7 @@ function ActiveTripRecovery() {
         if (cancelled) return;
         const trip = response.data?.data ?? response.data;
         if (trip) {
-          useTripStore.getState().setActiveTrip(trip.id, trip.status);
+          useTripStore.getState().setActiveTrip(trip);
           navigatedRef.current = true;
           InteractionManager.runAfterInteractions(() => {
             if (cancelled) return;
