@@ -36,8 +36,13 @@ export const NavigationScreen: React.FC = () => {
       .catch(() => {});
   }, [trip, tripStatus, setTripStatus]);
 
+  const lastFetchRef = useRef(0);
+
   useEffect(() => {
     if (!locationLat || !locationLng || !trip) return;
+    const now = Date.now();
+    if (now - lastFetchRef.current < 10000) return;
+    lastFetchRef.current = now;
     fetchDirections(locationLat, locationLng, trip.origin_lat, trip.origin_lng);
   }, [locationLat, locationLng, trip]);
 

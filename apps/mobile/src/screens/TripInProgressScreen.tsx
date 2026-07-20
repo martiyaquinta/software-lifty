@@ -27,7 +27,7 @@ export const TripInProgressScreen: React.FC = () => {
   const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
   const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
   const [distKm, setDistKm] = useState<number | null>(null);
-  const [totalDistKm, setTotalDistKm] = useState<number | null>(null);
+  const totalDistKmRef = useRef<number | null>(trip?.distance_km ?? null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchDirections = useCallback(async () => {
@@ -44,11 +44,11 @@ export const TripInProgressScreen: React.FC = () => {
       const data = res.data?.data ?? res.data;
       setEtaMinutes(data.duration_minutes);
       setDistKm(data.distance_km);
-      if (!totalDistKm) setTotalDistKm(data.distance_km);
+      if (!totalDistKmRef.current && data.distance_km) totalDistKmRef.current = data.distance_km;
       const coords = decodePolyline(data.polyline);
       setRouteCoords(coords);
     } catch {}
-  }, [locationLat, locationLng, trip, totalDistKm]);
+  }, [locationLat, locationLng, trip]);
 
   useEffect(() => {
     fetchDirections();
@@ -81,8 +81,11 @@ export const TripInProgressScreen: React.FC = () => {
   };
 
   const progress =
-    totalDistKm && distKm
-      ? Math.min(100, Math.max(0, ((totalDistKm - distKm) / totalDistKm) * 100))
+    totalDistKmRef.current && distKm
+      ? Math.min(
+          100,
+          Math.max(0, ((totalDistKmRef.current - distKm) / totalDistKmRef.current) * 100),
+        )
       : 55;
 
   return (
