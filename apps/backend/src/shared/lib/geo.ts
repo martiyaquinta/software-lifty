@@ -29,6 +29,41 @@ export interface DistanceMatrixResult {
   duration_minutes: number;
 }
 
+interface OSRMStep {
+  name: string;
+  distance: number;
+  duration: number;
+  maneuver: {
+    type: string;
+    modifier?: string;
+  };
+}
+
+const MAIN_ROAD_PATTERNS = [
+  /^Av\.?\b/i,
+  /^Av(da)?\.?\s/i,
+  /^Autopista\b/i,
+  /^AU\b/i,
+  /^RN\b/i,
+  /^Ruta\b/i,
+  /^Bv\.?\b/i,
+  /^Boulevard\b/i,
+];
+
+function scoreRoute(steps: OSRMStep[]): number {
+  let score = 0;
+  for (const step of steps) {
+    if (MAIN_ROAD_PATTERNS.some((p) => p.test(step.name))) {
+      score += step.distance / 100;
+    }
+    score += step.distance / 500;
+    if (['turn', 'roundabout', 'fork', 'end of road'].includes(step.maneuver.type)) {
+      score -= 20;
+    }
+  }
+  return score;
+}
+
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -182,25 +217,42 @@ export async function directions(
     if (cached) return JSON.parse(cached);
 
     const coords = `${origin_lng},${origin_lat};${dest_lng},${dest_lat}`;
-    const url = `${OSRM_URL}/route/v1/driving/${coords}?geometries=polyline&overview=full`;
+    const url = `${OSRM_URL}/route/v1/driving/${coords}?geometries=polyline&overview=full&alternatives=true&steps=true`;
 
     const res = await fetch(url);
     if (!res.ok) throw new Error(`OSRM API error: ${res.status}`);
 
     const data = (await res.json()) as {
       code: string;
-      routes?: Array<{ distance: number; duration: number; geometry: string }>;
+      routes?: Array<{
+        distance: number;
+        duration: number;
+        geometry: string;
+        legs?: Array<{ steps?: OSRMStep[] }>;
+      }>;
     };
 
     if (data.code !== 'Ok' || !data.routes?.length) throw new Error('No routes found');
 
-    const route = data.routes[0];
-    const distance_km = Math.round((route.distance / 1000) * 100) / 100;
-    const duration_minutes = Math.round((route.duration / 60) * 100) / 100;
+    let bestRoute = data.routes[0];
+    let bestScore = Number.NEGATIVE_INFINITY;
+
+    for (const route of data.routes) {
+      const steps = route.legs?.[0]?.steps;
+      if (!steps || steps.length === 0) continue;
+      const s = scoreRoute(steps);
+      if (s > bestScore) {
+        bestScore = s;
+        bestRoute = route;
+      }
+    }
+
+    const distance_km = Math.round((bestRoute.distance / 1000) * 100) / 100;
+    const duration_minutes = Math.round((bestRoute.duration / 60) * 100) / 100;
     const result: DirectionsResult = {
       distance_km,
       duration_minutes,
-      polyline: route.geometry,
+      polyline: bestRoute.geometry,
     };
 
     await cacheSet(cacheKey, JSON.stringify(result), 300);

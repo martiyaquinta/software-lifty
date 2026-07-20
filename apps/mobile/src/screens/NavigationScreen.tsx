@@ -1,37 +1,89 @@
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Platform, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { apiClient } from '../api/client';
 import { Button } from '../components/Button';
 import { MapView } from '../components/MapView';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { decodePolyline } from '../lib/polyline';
+import { useLocationStore } from '../store/locationStore';
 import { useTripStore } from '../store/tripStore';
 import { theme } from '../theme';
-
-const PASSENGER_COORD: [number, number] = [-65.1833, -31.9333];
 
 export const NavigationScreen: React.FC = () => {
   const navigation = useAppNavigation();
   const [loading, setLoading] = useState(false);
-  const activeTripId = useTripStore((s) => s.activeTripId);
+  const trip = useTripStore((s) => s.trip);
   const tripStatus = useTripStore((s) => s.tripStatus);
   const setTripStatus = useTripStore((s) => s.setTripStatus);
+  const locationLat = useLocationStore((s) => s.lat);
+  const locationLng = useLocationStore((s) => s.lng);
   const enRouteSent = useRef(false);
+  const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
+  const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
+  const [distKm, setDistKm] = useState<number | null>(null);
+
+  const pickupCoord: [number, number] = trip
+    ? [trip.origin_lng, trip.origin_lat]
+    : [-65.1833, -31.9333];
 
   useEffect(() => {
-    if (!activeTripId || tripStatus !== 'accepted' || enRouteSent.current) return;
+    if (!trip || tripStatus !== 'accepted' || enRouteSent.current) return;
     enRouteSent.current = true;
     apiClient
-      .post(`/trips/${activeTripId}/en-route`)
+      .post(`/trips/${trip.id}/en-route`)
       .then(() => setTripStatus('en_route'))
       .catch(() => {});
-  }, [activeTripId, tripStatus, setTripStatus]);
+  }, [trip, tripStatus, setTripStatus]);
+
+  const lastFetchRef = useRef(0);
+
+  useEffect(() => {
+    if (!locationLat || !locationLng || !trip) return;
+    const now = Date.now();
+    if (now - lastFetchRef.current < 10000) return;
+    lastFetchRef.current = now;
+    fetchDirections(locationLat, locationLng, trip.origin_lat, trip.origin_lng);
+  }, [locationLat, locationLng, trip]);
+
+  const fetchDirections = async (lat: number, lng: number, destLat: number, destLng: number) => {
+    try {
+      const res = await apiClient.get('/maps/directions', {
+        params: { origin_lat: lat, origin_lng: lng, dest_lat: destLat, dest_lng: destLng },
+      });
+      const data = res.data?.data ?? res.data;
+      setEtaMinutes(data.duration_minutes);
+      setDistKm(data.distance_km);
+      const coords = decodePolyline(data.polyline);
+      setRouteCoords(coords);
+    } catch {}
+  };
+
+  const openWaze = () => {
+    const dest = trip;
+    if (!dest) return;
+    const url =
+      Platform.OS === 'ios'
+        ? `waze://?ll=${dest.origin_lat},${dest.origin_lng}&navigate=yes`
+        : `https://waze.com/ul?ll=${dest.origin_lat},${dest.origin_lng}&navigate=yes`;
+    Linking.openURL(url).catch(() => Alert.alert('Error', 'No se pudo abrir Waze'));
+  };
+
+  const openMaps = () => {
+    const dest = trip;
+    if (!dest) return;
+    const url =
+      Platform.OS === 'ios'
+        ? `maps://app?daddr=${dest.origin_lat},${dest.origin_lng}`
+        : `https://www.google.com/maps/dir/?api=1&destination=${dest.origin_lat},${dest.origin_lng}`;
+    Linking.openURL(url).catch(() => Alert.alert('Error', 'No se pudo abrir Maps'));
+  };
 
   const handleArrive = async () => {
-    if (!activeTripId) return;
+    if (!trip) return;
     setLoading(true);
     try {
-      await apiClient.post(`/trips/${activeTripId}/arrived`);
+      await apiClient.post(`/trips/${trip.id}/arrived`);
       setTripStatus('waiting');
       navigation.navigate('WaitingPassenger');
     } catch {
@@ -50,29 +102,34 @@ export const NavigationScreen: React.FC = () => {
           markers={[
             {
               id: 'pickup',
-              coordinate: PASSENGER_COORD,
+              coordinate: pickupCoord,
               title: 'Pasajero',
               color: theme.colors.dangerRed,
             },
           ]}
+          routeLine={routeCoords.length > 0 ? routeCoords : undefined}
         />
       </View>
       <View style={styles.bottomCard}>
         <Text style={styles.label}>Rumbo al pasajero</Text>
-        <Text style={styles.address}>Av. San Martin 450</Text>
-        <Text style={styles.eta}>4 min · 1.8 km</Text>
+        <Text style={styles.address}>{trip?.origin_address ?? 'Origen'}</Text>
+        {etaMinutes !== null && distKm !== null ? (
+          <Text style={styles.eta}>
+            {Math.round(etaMinutes)} min · {distKm} km
+          </Text>
+        ) : null}
         <View style={styles.navButtons}>
           <Button
             title="Abrir en Waze"
             variant="secondary"
-            onPress={() => {}}
+            onPress={openWaze}
             style={styles.navButton}
             textStyle={styles.navButtonText}
           />
           <Button
             title="Abrir en Maps"
             variant="secondary"
-            onPress={() => {}}
+            onPress={openMaps}
             style={styles.navButton}
             textStyle={styles.navButtonText}
           />
