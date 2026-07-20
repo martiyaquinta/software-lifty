@@ -87,6 +87,8 @@ describe('IncomingRequestScreen', () => {
     });
     expect(mockNavigate).toHaveBeenCalledWith('Navigation');
     expect(useTripStore.getState().tripStatus).toBe('accepted');
+    expect(useTripStore.getState().trip).not.toBeNull();
+    expect(useTripStore.getState().trip?.id).toBe('trip-real-1');
   });
 
   test('reject uses the real /reject endpoint with the real trip id', async () => {
