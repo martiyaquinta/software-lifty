@@ -150,6 +150,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 8,
+    flexShrink: 0,
   },
   label: {
     fontSize: theme.fontSize.xs,
