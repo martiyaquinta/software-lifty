@@ -5,6 +5,7 @@ import { apiClient } from '../api/client';
 import { Button } from '../components/Button';
 import { MapView } from '../components/MapView';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { startTracking, stopTracking } from '../lib/location';
 import { decodePolyline } from '../lib/polyline';
 import { useLocationStore } from '../store/locationStore';
 import { useTripStore } from '../store/tripStore';
@@ -26,6 +27,13 @@ export const NavigationScreen: React.FC = () => {
   const pickupCoord: [number, number] = trip
     ? [trip.origin_lng, trip.origin_lat]
     : [-65.1833, -31.9333];
+
+  useEffect(() => {
+    startTracking();
+    return () => {
+      stopTracking();
+    };
+  }, []);
 
   useEffect(() => {
     if (!trip || tripStatus !== 'accepted' || enRouteSent.current) return;
@@ -56,7 +64,9 @@ export const NavigationScreen: React.FC = () => {
       setDistKm(data.distance_km);
       const coords = decodePolyline(data.polyline);
       setRouteCoords(coords);
-    } catch {}
+    } catch (err) {
+      if (__DEV__) console.warn('[Navigation] fetchDirections failed:', err);
+    }
   };
 
   const openWaze = () => {

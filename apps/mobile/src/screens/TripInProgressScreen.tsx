@@ -12,6 +12,7 @@ import { apiClient } from '../api/client';
 import { Button } from '../components/Button';
 import { MapView } from '../components/MapView';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { startTracking, stopTracking } from '../lib/location';
 import { decodePolyline } from '../lib/polyline';
 import { useLocationStore } from '../store/locationStore';
 import { useTripStore } from '../store/tripStore';
@@ -47,8 +48,17 @@ export const TripInProgressScreen: React.FC = () => {
       if (!totalDistKmRef.current && data.distance_km) totalDistKmRef.current = data.distance_km;
       const coords = decodePolyline(data.polyline);
       setRouteCoords(coords);
-    } catch {}
+    } catch (err) {
+      if (__DEV__) console.warn('[TripInProgress] fetchDirections failed:', err);
+    }
   }, [locationLat, locationLng, trip]);
+
+  useEffect(() => {
+    startTracking();
+    return () => {
+      stopTracking();
+    };
+  }, []);
 
   useEffect(() => {
     fetchDirections();
@@ -81,12 +91,14 @@ export const TripInProgressScreen: React.FC = () => {
   };
 
   const progress =
-    totalDistKmRef.current && distKm
+    totalDistKmRef.current && distKm !== null
       ? Math.min(
           100,
           Math.max(0, ((totalDistKmRef.current - distKm) / totalDistKmRef.current) * 100),
         )
-      : 55;
+      : trip?.distance_km
+        ? 0
+        : 55;
 
   return (
     <View style={styles.container}>
@@ -114,14 +126,16 @@ export const TripInProgressScreen: React.FC = () => {
         <TouchableOpacity
           onPress={() => {
             if (!trip) return;
-            const url =
-              Platform.OS === 'ios'
-                ? `waze://?ll=${trip.dest_lat},${trip.dest_lng}&navigate=yes`
-                : `https://waze.com/ul?ll=${trip.dest_lat},${trip.dest_lng}&navigate=yes`;
-            Linking.openURL(url).catch(() => {});
+            const destLabel = encodeURIComponent(trip.dest_address ?? 'Destino');
+            const url = Platform.select({
+              ios: `maps://app?daddr=${trip.dest_lat},${trip.dest_lng}&dirflg=d`,
+              android: `geo:0,0?q=${trip.dest_lat},${trip.dest_lng}(${destLabel})`,
+              default: `https://www.google.com/maps/dir/?api=1&destination=${trip.dest_lat},${trip.dest_lng}`,
+            });
+            Linking.openURL(url!).catch(() => {});
           }}
         >
-          <Text style={styles.wazeLink}>Abrir en Waze</Text>
+          <Text style={styles.mapsLink}>Abrir en Maps</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -150,6 +164,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 8,
+    flexShrink: 0,
   },
   label: {
     fontSize: theme.fontSize.xs,
@@ -183,7 +198,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginTop: theme.spacing.sm,
   },
-  wazeLink: {
+  mapsLink: {
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
     color: theme.colors.mediumGray,
