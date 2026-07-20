@@ -174,6 +174,16 @@ export const OnlineScreen: React.FC = () => {
             <Text style={styles.breakdownValue}>{formatCurrency(earnings.transfer)}</Text>
           </View>
         </View>
+        {earnings.platform_debt ? (
+          <View style={[styles.earningsBreakdown, { marginTop: theme.spacing.sm }]}>
+            <Text style={[styles.breakdownLabel, { color: theme.colors.dangerRed }]}>
+              Deuda pendiente
+            </Text>
+            <Text style={[styles.breakdownValue, { color: theme.colors.dangerRed }]}>
+              -{formatCurrency(earnings.platform_debt)}
+            </Text>
+          </View>
+        ) : null}
       </Card>
     );
   };

@@ -38,6 +38,8 @@ export const EarningsScreen: React.FC = () => {
   const formatCurrency = (amount: number) =>
     `$${amount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  const retentionTotal = earnings?.trips?.reduce((sum, t) => sum + (t.platform_fee ?? 0), 0) ?? 0;
+
   const formatTime = (iso: string) => {
     const date = new Date(iso);
     return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
@@ -46,12 +48,6 @@ export const EarningsScreen: React.FC = () => {
   const shortAddress = (address: string) => {
     const parts = address.split(',');
     return parts.length > 1 ? parts[0].trim() : address;
-  };
-
-  const paymentMethodLabel = (method: string | null) => {
-    if (method === 'cash') return 'Efectivo';
-    if (method === 'mercadopago') return 'Mercado Pago';
-    return '—';
   };
 
   return (
@@ -107,6 +103,36 @@ export const EarningsScreen: React.FC = () => {
                   {formatCurrency(earnings.total)}
                 </Text>
               </View>
+              {retentionTotal > 0 && (
+                <View style={styles.row}>
+                  <Text style={[styles.rowLabel, { color: theme.colors.dangerRed }]}>
+                    Retencion Lifty
+                  </Text>
+                  <Text style={[styles.rowValue, { color: theme.colors.dangerRed }]}>
+                    -{formatCurrency(retentionTotal)}
+                  </Text>
+                </View>
+              )}
+              {earnings.platform_debt ? (
+                <View style={styles.row}>
+                  <Text style={[styles.rowLabel, { color: theme.colors.dangerRed }]}>
+                    Deuda pendiente
+                  </Text>
+                  <Text style={[styles.rowValue, { color: theme.colors.dangerRed }]}>
+                    -{formatCurrency(earnings.platform_debt)}
+                  </Text>
+                </View>
+              ) : null}
+            </Card>
+
+            <Card>
+              <TouchableOpacity
+                style={styles.withdrawRow}
+                onPress={() => navigation.navigate('Withdraw')}
+              >
+                <Text style={styles.withdrawLabel}>Retirar saldo</Text>
+                <Text style={styles.changeLink}>Retirar →</Text>
+              </TouchableOpacity>
             </Card>
 
             <Card>
@@ -133,11 +159,12 @@ export const EarningsScreen: React.FC = () => {
                       </Text>
                     </View>
                     <View style={styles.tripRight}>
-                      <Text style={styles.tripAmount}>
-                        {formatCurrency(trip.driver_earnings ?? 0)}
+                      <Text style={styles.tripAmount}>{formatCurrency(trip.total_fare ?? 0)}</Text>
+                      <Text style={styles.tripRetention}>
+                        Retencion -{formatCurrency(trip.platform_fee ?? 0)}
                       </Text>
-                      <Text style={styles.tripPayment}>
-                        {paymentMethodLabel(trip.payment_method)}
+                      <Text style={styles.tripNet}>
+                        Recibis {formatCurrency(trip.driver_earnings ?? 0)}
                       </Text>
                     </View>
                   </View>
@@ -316,6 +343,15 @@ const styles = StyleSheet.create({
     color: theme.colors.turquoise,
     fontWeight: theme.fontWeight.medium,
   },
+  tripRetention: {
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.dangerRed,
+    fontWeight: theme.fontWeight.medium,
+  },
+  tripNet: {
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.mediumGray,
+  },
   cvuText: {
     fontSize: theme.fontSize.md,
     fontWeight: theme.fontWeight.medium,
@@ -325,6 +361,16 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
     color: theme.colors.turquoise,
+  },
+  withdrawRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  withdrawLabel: {
+    fontSize: theme.fontSize.md,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.deepBlue,
   },
   errorSection: {
     width: 343,

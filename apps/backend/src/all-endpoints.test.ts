@@ -358,6 +358,9 @@ describe('Trips', () => {
       origin_lng: 1,
       dest_lat: 2,
       dest_lng: 2,
+      vehicle_type: 'car',
+      distance_km: 5,
+      duration_minutes: 15,
     });
     expect(status).toBe(401);
   });
@@ -371,6 +374,9 @@ describe('Trips', () => {
         origin_lng: -68.845,
         dest_lat: -32.895,
         dest_lng: -68.83,
+        vehicle_type: 'car',
+        distance_km: 5,
+        duration_minutes: 15,
       },
       token,
     );
@@ -387,6 +393,9 @@ describe('Trips', () => {
         origin_lng: -68.845,
         dest_lat: -32.895,
         dest_lng: -68.83,
+        vehicle_type: 'car',
+        distance_km: 5,
+        duration_minutes: 15,
       },
       token,
     );
@@ -448,6 +457,9 @@ describe('Trips', () => {
         origin_lng: -65.0,
         dest_lat: -31.88,
         dest_lng: -65.02,
+        vehicle_type: 'car',
+        distance_km: 5,
+        duration_minutes: 15,
       },
       token,
     );
@@ -471,6 +483,9 @@ describe('Trips', () => {
         origin_lng: -65.0,
         dest_lat: -31.88,
         dest_lng: -65.02,
+        vehicle_type: 'car',
+        distance_km: 5,
+        duration_minutes: 15,
       },
       token,
     );
