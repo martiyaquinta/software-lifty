@@ -1,7 +1,14 @@
 import { theme } from '@/theme';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View, type ViewStyle } from 'react-native';
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import WebView from 'react-native-webview/lib/WebView';
 import type { WebViewMessageEvent } from 'react-native-webview/lib/WebViewTypes';
 
@@ -21,6 +28,7 @@ interface MapViewProps {
   routeLine?: Array<[number, number]>;
   followUserLocation?: boolean;
   style?: ViewStyle;
+  onError?: () => void;
 }
 
 const DEFAULT_CENTER: [number, number] = [-65.1833, -31.9333];
@@ -36,6 +44,7 @@ const MAP_HTML = `<!DOCTYPE html>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body, #map { width: 100%; height: 100%; overflow: hidden; }
+  body { background: #F1F4F6; }
   .marker-dot {
     width: 16px; height: 16px;
     border-radius: 50%;
@@ -225,6 +234,13 @@ const MAP_HTML = `<!DOCTYPE html>
       case 'route':
         updateRoute(msg.coordinates || []);
         break;
+      case 'fitRoute':
+        if (msg.coordinates && msg.coordinates.length >= 2) {
+          var b = msg.coordinates.reduce(function (bb, c) { return bb.extend(c); },
+            new maplibregl.LngLatBounds(msg.coordinates[0], msg.coordinates[0]));
+          map.fitBounds(b, { padding: 60, maxZoom: 16, duration: 600 });
+        }
+        break;
       case 'followUser':
         followRequested = !!msg.enabled;
         if (msg.enabled) startFollowUser();
@@ -250,9 +266,23 @@ export const MapView: React.FC<MapViewProps> = ({
   routeLine,
   followUserLocation = false,
   style,
+  onError,
 }) => {
   const webViewRef = useRef<any>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const retryKey = useRef(0);
+
+  const handleRetry = useCallback(() => {
+    setHasError(false);
+    setIsLoaded(false);
+    retryKey.current += 1;
+  }, []);
+
+  const handleWebViewError = useCallback(() => {
+    setHasError(true);
+    onError?.();
+  }, [onError]);
 
   useEffect(() => {
     if (!isLoaded || !webViewRef.current) return;
@@ -289,6 +319,17 @@ export const MapView: React.FC<MapViewProps> = ({
   }, [routeLine, isLoaded]);
 
   useEffect(() => {
+    if (!isLoaded || !webViewRef.current || !routeLine || routeLine.length < 2) return;
+
+    webViewRef.current.postMessage(
+      JSON.stringify({
+        type: 'fitRoute',
+        coordinates: routeLine,
+      }),
+    );
+  }, [isLoaded]);
+
+  useEffect(() => {
     if (!isLoaded || !webViewRef.current) return;
 
     webViewRef.current.postMessage(
@@ -299,29 +340,47 @@ export const MapView: React.FC<MapViewProps> = ({
     );
   }, [followUserLocation, isLoaded]);
 
-  const handleMessage = useCallback((event: WebViewMessageEvent) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      switch (data.type) {
-        case 'moved':
-          break;
-        case 'markerClick':
-          break;
-        case 'ready':
-          break;
-        case 'error':
-          break;
-      }
-    } catch {}
-  }, []);
+  const handleMessage = useCallback(
+    (event: WebViewMessageEvent) => {
+      try {
+        const data = JSON.parse(event.nativeEvent.data);
+        switch (data.type) {
+          case 'moved':
+            break;
+          case 'markerClick':
+            break;
+          case 'ready':
+            break;
+          case 'error':
+            setHasError(true);
+            onError?.();
+            break;
+        }
+      } catch {}
+    },
+    [onError],
+  );
+
+  if (hasError) {
+    return (
+      <View style={[styles.container, styles.errorContainer, style]}>
+        <Text style={styles.errorText}>No se pudo cargar el mapa</Text>
+        <TouchableOpacity onPress={handleRetry} style={styles.retryButton}>
+          <Text style={styles.retryText}>Reintentar</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, style]}>
       <WebViewComponent
+        key={retryKey.current}
         ref={webViewRef}
         source={{ html: MAP_HTML }}
         style={styles.webview}
         onLoadEnd={() => setIsLoaded(true)}
+        onError={handleWebViewError}
         onMessage={handleMessage}
         javaScriptEnabled={true}
         domStorageEnabled={true}
@@ -368,5 +427,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: theme.colors.lightGray,
+  },
+  errorContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.colors.lightGray,
+    gap: theme.spacing.md,
+  },
+  errorText: {
+    fontSize: theme.fontSize.md,
+    color: theme.colors.mediumGray,
+  },
+  retryButton: {
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.radius.buttonRadius,
+    backgroundColor: theme.colors.turquoise,
+  },
+  retryText: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.white,
   },
 });

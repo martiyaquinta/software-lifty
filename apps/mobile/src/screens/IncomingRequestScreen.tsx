@@ -44,7 +44,7 @@ export const IncomingRequestScreen: React.FC = () => {
         if (cancelled) return;
         if (active && active.status === 'request_received') {
           setTrip(active);
-          setActiveTrip(active.id, active.status);
+          setActiveTrip(active);
         } else {
           navigation.navigate('Online');
         }
@@ -87,7 +87,7 @@ export const IncomingRequestScreen: React.FC = () => {
     if (!trip) return;
     try {
       await apiClient.post(`/trips/${trip.id}/accept`);
-      setActiveTrip(trip.id, 'accepted');
+      setActiveTrip({ ...trip, status: 'accepted' });
       setAccepted(true);
       navigation.navigate('Navigation');
     } catch {}

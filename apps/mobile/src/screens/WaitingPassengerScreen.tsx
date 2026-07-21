@@ -13,6 +13,7 @@ import {
 import { apiClient } from '../api/client';
 import { Button } from '../components/Button';
 import { ChatBubble } from '../components/ChatBubble';
+import { LiftyWatermark } from '../components/LiftyWatermark';
 import { useAppNavigation } from '../hooks/useAppNavigation';
 import { sendMessage, subscribeToTripChannel } from '../lib/realtime';
 import { useAuthStore } from '../store/authStore';
@@ -151,6 +152,7 @@ export const WaitingPassengerScreen: React.FC = () => {
       <Text style={styles.address}>en Av. San Martin 450</Text>
 
       <View style={styles.chatArea}>
+        <LiftyWatermark />
         <ScrollView
           ref={chatScrollRef}
           style={styles.chatScroll}
@@ -240,7 +242,7 @@ const styles = StyleSheet.create({
     width: 343,
     flex: 1,
     borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.lightGray,
     padding: theme.spacing.md,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -250,6 +252,7 @@ const styles = StyleSheet.create({
   },
   chatScroll: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
   chatContent: {
     gap: theme.spacing.sm,
