@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
 import { drivers, tripEvents, trips, users } from '../../shared/db/schema';
-import { createTestToken } from '../../shared/testing/utils';
+import { createTestAuthPlugin, createTestToken } from '../../shared/testing/utils';
 
 let app: any;
 
@@ -48,7 +48,7 @@ async function createDriverRow(token: string): Promise<string> {
 }
 
 beforeAll(() => {
-  app = createApp();
+  app = createApp(createTestAuthPlugin());
 });
 
 beforeEach(async () => {
@@ -430,5 +430,102 @@ describe('Trip State Machine', () => {
     expect(data.platform_fee).toBeGreaterThan(0);
     expect(data.driver_earnings).toBeGreaterThan(0);
     expect(data.driver_earnings).toBeLessThan(data.total_fare);
+  });
+
+  test('14. collect cash trip sets is_collected and accumulates platform_debt', async () => {
+    const token = await registerAndGetToken(phone, password);
+    const driverId = await createDriverRow(token);
+
+    const { data: trip } = await request(
+      'POST',
+      '/api/trips',
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
+      token,
+    );
+
+    await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/en-route`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/arrived`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/start`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/complete`, undefined, token);
+
+    const { status, data } = await request(
+      'PUT',
+      `/api/trips/${trip.id}/collect`,
+      { payment_method: 'cash' },
+      token,
+    );
+
+    expect(status).toBe(200);
+    expect(data.is_collected).toBe(true);
+    expect(data.payment_method).toBe('cash');
+
+    const db = getDb();
+    const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId));
+    expect(driver.platform_debt).toBeGreaterThan(0);
+  });
+
+  test('15. collect mercadopago trip sets is_collected and does NOT accumulate platform_debt', async () => {
+    const token = await registerAndGetToken(phone, password);
+    const driverId = await createDriverRow(token);
+
+    const { data: trip } = await request(
+      'POST',
+      '/api/trips',
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
+      token,
+    );
+
+    await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/en-route`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/arrived`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/start`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/complete`, undefined, token);
+
+    const { status, data } = await request(
+      'PUT',
+      `/api/trips/${trip.id}/collect`,
+      { payment_method: 'mercadopago' },
+      token,
+    );
+
+    expect(status).toBe(200);
+    expect(data.is_collected).toBe(true);
+    expect(data.payment_method).toBe('mercadopago');
+
+    const db = getDb();
+    const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId));
+    expect(driver.platform_debt).toBe(0);
+  });
+
+  test('16. collect already collected trip returns error', async () => {
+    const token = await registerAndGetToken(phone, password);
+    await createDriverRow(token);
+
+    const { data: trip } = await request(
+      'POST',
+      '/api/trips',
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
+      token,
+    );
+
+    await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/en-route`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/arrived`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/start`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/complete`, undefined, token);
+
+    await request('PUT', `/api/trips/${trip.id}/collect`, { payment_method: 'cash' }, token);
+
+    const { status, data } = await request(
+      'PUT',
+      `/api/trips/${trip.id}/collect`,
+      { payment_method: 'mercadopago' },
+      token,
+    );
+
+    expect(status).toBe(400);
+    expect(data.error.code).toBe('BAD_REQUEST');
+    expect(data.error.message).toContain('already collected');
   });
 });

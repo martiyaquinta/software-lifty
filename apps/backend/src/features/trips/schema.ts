@@ -22,3 +22,7 @@ export const rateTripBody = t.Object({
   comment: t.Optional(t.String()),
   tags: t.Optional(t.String()),
 });
+
+export const collectBody = t.Object({
+  payment_method: t.Union([t.Literal('cash'), t.Literal('mercadopago')]),
+});

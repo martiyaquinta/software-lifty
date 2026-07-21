@@ -41,7 +41,7 @@ if (process.env.NODE_ENV === 'production') {
   validateEnv();
 }
 
-export function createApp() {
+export function createApp(customAuthPlugin?: typeof authPlugin) {
   const app = new Elysia();
 
   if (process.env.NODE_ENV !== 'production') {
@@ -85,7 +85,7 @@ export function createApp() {
         max: Number(process.env.RATE_LIMIT_MAX) || 100,
       }),
     )
-    .use(authPlugin)
+    .use(customAuthPlugin ?? authPlugin)
     .use(locationWsPlugin)
     .group('/api', (app) =>
       app

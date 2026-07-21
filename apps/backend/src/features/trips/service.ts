@@ -193,17 +193,6 @@ export const tripService = {
   async completeTrip(user: AuthUser, tripId: string) {
     const driverId = await getDriverId(user);
     const trip = await transitionTrip(driverId, tripId, 'completed');
-
-    if (trip.payment_method === 'cash' && trip.platform_fee) {
-      await db
-        .update(drivers)
-        .set({
-          platform_debt: sql`${drivers.platform_debt} + ${trip.platform_fee}`,
-          updated_at: new Date(),
-        })
-        .where(eq(drivers.id, driverId));
-    }
-
     return trip;
   },
 
@@ -244,24 +233,37 @@ export const tripService = {
     return findTrip(driverId, tripId);
   },
 
-  async collectTrip(user: AuthUser, tripId: string) {
+  async collectTrip(user: AuthUser, tripId: string, paymentMethod: 'cash' | 'mercadopago') {
     const driverId = await getDriverId(user);
-    const trip = await findTrip(driverId, tripId);
 
-    if (trip.status !== 'completed') {
-      throw new AppError('Trip must be completed before collecting payment', 400, 'BAD_REQUEST');
-    }
+    return db.transaction(async (tx) => {
+      const trip = await findTrip(driverId, tripId, tx);
 
-    if (trip.is_collected) {
-      throw new AppError('Payment already collected for this trip', 400, 'BAD_REQUEST');
-    }
+      if (trip.status !== 'completed') {
+        throw new AppError('Trip must be completed before collecting payment', 400, 'BAD_REQUEST');
+      }
 
-    const [updated] = await db
-      .update(trips)
-      .set({ is_collected: true, updated_at: new Date() })
-      .where(eq(trips.id, tripId))
-      .returning();
+      if (trip.is_collected) {
+        throw new AppError('Payment already collected for this trip', 400, 'BAD_REQUEST');
+      }
 
-    return updated;
+      const [updated] = await tx
+        .update(trips)
+        .set({ is_collected: true, payment_method: paymentMethod, updated_at: new Date() })
+        .where(eq(trips.id, tripId))
+        .returning();
+
+      if (paymentMethod === 'cash' && trip.platform_fee) {
+        await tx
+          .update(drivers)
+          .set({
+            platform_debt: sql`${drivers.platform_debt} + ${trip.platform_fee}`,
+            updated_at: new Date(),
+          })
+          .where(eq(drivers.id, driverId));
+      }
+
+      return updated;
+    });
   },
 };
