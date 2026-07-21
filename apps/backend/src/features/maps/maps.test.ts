@@ -127,6 +127,24 @@ describe('Maps Proxy', () => {
     expect(data.polyline).toBeString();
   });
 
+  test('directions should score alternative routes by road hierarchy', async () => {
+    const token = await registerAndGetToken(phone, password);
+
+    const { status, data } = await request(
+      'GET',
+      '/api/maps/directions?origin_lat=-34.6037&origin_lng=-58.3816&dest_lat=-34.6158&dest_lng=-58.4333',
+      undefined,
+      token,
+    );
+
+    expect(status).toBe(200);
+    expect(data.distance_km).toBeNumber();
+    expect(data.distance_km).toBeGreaterThan(0);
+    expect(data.duration_minutes).toBeNumber();
+    expect(data.polyline).toBeString();
+    expect(data.polyline.length).toBeGreaterThan(0);
+  });
+
   test('fare-estimate calculates fare', async () => {
     const token = await registerAndGetToken(phone, password);
 

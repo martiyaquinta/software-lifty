@@ -6,7 +6,9 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -112,6 +114,7 @@ export const ProfileScreen: React.FC = () => {
   const [editVisible, setEditVisible] = useState(false);
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
   const [editPhotoUri, setEditPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -155,6 +158,7 @@ export const ProfileScreen: React.FC = () => {
     const parts = (profile.full_name ?? '').split(' ');
     setEditFirstName(parts[0] ?? '');
     setEditLastName(parts.slice(1).join(' ') ?? '');
+    setEditPhone(profile.phone ?? '');
     setEditPhotoUri(null);
     setEditVisible(true);
   };
@@ -190,6 +194,7 @@ export const ProfileScreen: React.FC = () => {
       await apiClient.put('/drivers/me', {
         first_name: editFirstName.trim(),
         last_name: editLastName.trim(),
+        phone: editPhone.trim(),
         photo_url: photoUrl,
       });
 
@@ -327,7 +332,10 @@ export const ProfileScreen: React.FC = () => {
       </ScrollView>
 
       <Modal visible={editVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Editar perfil</Text>
@@ -336,39 +344,52 @@ export const ProfileScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.editAvatar} onPress={handlePickPhoto}>
-              {editPhotoUri ? (
-                <Image source={{ uri: editPhotoUri }} style={styles.editAvatarImage} />
-              ) : isRealUrl(profile?.avatar_url ?? null) ? (
-                <Image source={{ uri: profile!.avatar_url! }} style={styles.editAvatarImage} />
-              ) : (
-                <Text style={styles.editAvatarIcon}>📷</Text>
-              )}
-              <Text style={styles.editAvatarLabel}>Cambiar foto</Text>
-            </TouchableOpacity>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.modalScrollContent}
+            >
+              <TouchableOpacity style={styles.editAvatar} onPress={handlePickPhoto}>
+                {editPhotoUri ? (
+                  <Image source={{ uri: editPhotoUri }} style={styles.editAvatarImage} />
+                ) : isRealUrl(profile?.avatar_url ?? null) ? (
+                  <Image source={{ uri: profile!.avatar_url! }} style={styles.editAvatarImage} />
+                ) : (
+                  <Text style={styles.editAvatarIcon}>📷</Text>
+                )}
+                <Text style={styles.editAvatarLabel}>Cambiar foto</Text>
+              </TouchableOpacity>
 
-            <Input
-              placeholder="Nombre"
-              value={editFirstName}
-              onChangeText={setEditFirstName}
-              containerStyle={styles.editInput}
-            />
-            <Input
-              placeholder="Apellido"
-              value={editLastName}
-              onChangeText={setEditLastName}
-              containerStyle={styles.editInput}
-            />
+              <Input
+                placeholder="Nombre"
+                value={editFirstName}
+                onChangeText={setEditFirstName}
+                containerStyle={styles.editInput}
+              />
+              <Input
+                placeholder="Apellido"
+                value={editLastName}
+                onChangeText={setEditLastName}
+                containerStyle={styles.editInput}
+              />
+              <Input
+                placeholder="Telefono"
+                value={editPhone}
+                onChangeText={setEditPhone}
+                keyboardType="phone-pad"
+                containerStyle={styles.editInput}
+              />
 
-            <Button
-              title="GUARDAR"
-              onPress={handleSave}
-              loading={saving}
-              disabled={saving}
-              style={styles.editButton}
-            />
+              <Button
+                title="GUARDAR"
+                onPress={handleSave}
+                loading={saving}
+                disabled={saving}
+                style={styles.editButton}
+              />
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <TabBar activeTab={activeTab} onTabPress={handleTabPress} />
@@ -537,6 +558,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: theme.radius.lg,
     borderTopRightRadius: theme.radius.lg,
     padding: theme.spacing.lg,
+    maxHeight: '90%',
+  },
+  modalScrollContent: {
     gap: theme.spacing.md,
     paddingBottom: 40,
   },
