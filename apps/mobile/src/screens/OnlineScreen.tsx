@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiClient, getValidated } from '../api/client';
@@ -121,6 +121,22 @@ export const OnlineScreen: React.FC = () => {
     ],
     [navigation, signOut, isOnline],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .get('/drivers/me/status')
+      .then(({ data: body }: any) => {
+        const payload = body?.data ?? body;
+        if (!cancelled && payload?.status === 'approved' && !payload?.has_district) {
+          navigation.replace('SelectProvince');
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const formatCurrency = (amount: number) =>
     `$${amount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
