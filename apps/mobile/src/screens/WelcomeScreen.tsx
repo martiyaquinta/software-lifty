@@ -81,14 +81,6 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 18,
   },
-  secondaryButton: {
-    borderColor: theme.colors.white,
-    height: 52,
-  },
-  secondaryButtonText: {
-    color: theme.colors.white,
-    fontSize: 18,
-  },
   spacerSmall: {
     height: 8,
   },
