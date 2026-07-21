@@ -84,7 +84,7 @@ export const RegisterScreen: React.FC = () => {
     try {
       await verifyEmail.mutateAsync({ email: email.trim(), code: verificationCode });
       setDriverStatus('pending');
-      navigation.replace('LoginCredentials');
+      navigation.replace('LoginCredentials', { email: email.trim() });
     } catch (err: any) {
       const message = err?.message ?? err?.response?.data?.message ?? 'Error al verificar';
       setError(message);
