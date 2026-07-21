@@ -17,12 +17,18 @@ export const WelcomeScreen: React.FC = () => {
       </View>
       <Text style={styles.wordmark}>Lifty</Text>
       <Text style={styles.tagline}>Conduci, gana en serio</Text>
-      <View style={styles.spacer} />
       <Button
-        title="COMENZAR"
-        onPress={() => navigation.navigate('Auth')}
+        title="CREAR CUENTA"
+        onPress={() => navigation.navigate('Register')}
         style={styles.button}
         textStyle={styles.buttonText}
+      />
+      <Button
+        title="INICIAR SESION"
+        variant="secondary"
+        onPress={() => navigation.navigate('LoginCredentials')}
+        style={styles.secondaryButton}
+        textStyle={styles.secondaryButtonText}
       />
       <View style={styles.spacerSmall} />
       <Text style={styles.terms}>Al continuar aceptas los Terminos y Condiciones</Text>
@@ -68,9 +74,6 @@ const styles = StyleSheet.create({
   tagline: {
     fontSize: theme.fontSize.md,
     color: theme.colors.mediumGray,
-  },
-  spacer: {
-    height: 24,
   },
   button: {
     width: 327,
