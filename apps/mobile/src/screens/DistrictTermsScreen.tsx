@@ -46,7 +46,10 @@ export const DistrictTermsScreen: React.FC = () => {
       await apiClient.put('/drivers/me/district', { district_id: districtId });
       navigation.replace('Online');
     } catch (err: any) {
-      const message = err?.message ?? 'No se pudo confirmar el municipio. Intentá de nuevo.';
+      const message =
+        err?.error?.message ??
+        err?.message ??
+        'No se pudo confirmar el municipio. Intentá de nuevo.';
       Alert.alert('Error', message);
     } finally {
       setSubmitting(false);
