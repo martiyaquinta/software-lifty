@@ -30,6 +30,7 @@ const SCREEN_TO_ROUTE = {
   Profile: '/profile',
   PaymentMethod: '/payment-method',
   Withdraw: '/withdraw',
+  SelectProvince: '/select-province',
 } as const;
 
 export type ScreenName = keyof typeof SCREEN_TO_ROUTE;
