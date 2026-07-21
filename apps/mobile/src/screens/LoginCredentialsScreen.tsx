@@ -38,13 +38,19 @@ export const LoginCredentialsScreen: React.FC = () => {
     if (emailParam && !username) {
       setUsername(emailParam);
     }
-  }, [emailParam]);
+  }, [emailParam, username]);
 
   const handleLogin = async () => {
     setError(null);
     try {
-      const loginResult = await login.mutateAsync({ email: username.trim(), password });
+      await login.mutateAsync({ email: username.trim(), password });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error al iniciar sesion';
+      setError(message);
+      return;
+    }
 
+    try {
       const { data: body } = await apiClient.get('/drivers/me/status');
       const payload = body?.data ?? body;
       const parsed = driverStatusSchema.safeParse(payload);

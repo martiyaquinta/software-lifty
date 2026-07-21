@@ -25,10 +25,9 @@ export const WelcomeScreen: React.FC = () => {
       />
       <Button
         title="INICIAR SESION"
-        variant="secondary"
         onPress={() => navigation.navigate('LoginCredentials')}
-        style={styles.secondaryButton}
-        textStyle={styles.secondaryButtonText}
+        style={styles.button}
+        textStyle={styles.buttonText}
       />
       <View style={styles.spacerSmall} />
       <Text style={styles.terms}>Al continuar aceptas los Terminos y Condiciones</Text>
