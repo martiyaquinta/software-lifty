@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
 import { users } from '../../shared/db/schema';
-import { createTestToken } from '../../shared/testing/utils';
+import { createTestAuthPlugin, createTestToken } from '../../shared/testing/utils';
 let app: any;
 
 async function truncateTables() {
@@ -36,17 +36,16 @@ async function registerAndGetToken(phone: string, _password: string): Promise<st
 }
 
 beforeAll(async () => {
-  app = createApp();
-  // Self-seed: districts normally come from migration 0007 / db:seed,
-  // but the test DB may have been created via drizzle-kit push (no data).
+  app = createApp(createTestAuthPlugin());
   const db = getDb();
-  const existing: any = await db.execute('SELECT count(*) AS count FROM districts');
+  const existing: any = await db.execute('SELECT count(*) AS count FROM districts WHERE name = \'Mina Clavero\' AND terms_and_conditions IS NOT NULL');
   if (Number(existing.rows[0]?.count ?? 0) === 0) {
-    await db.execute(`
-      INSERT INTO "districts" (name, province, status) VALUES
-        ('Villa Dolores', 'Córdoba', 'active'),
-        ('Mina Clavero', 'Córdoba', 'active')
-    `);
+    await db.execute(`UPDATE "districts" SET terms_and_conditions = 'Terms here', privacy_policy = 'Privacy here' WHERE name = 'Villa Dolores'`);
+    await db.execute(`UPDATE "districts" SET terms_and_conditions = 'Terms here', privacy_policy = 'Privacy here' WHERE name = 'Mina Clavero'`);
+  }
+  const noTerms: any = await db.execute('SELECT count(*) AS count FROM districts WHERE name = \'Sin Terminos\'');
+  if (Number(noTerms.rows[0]?.count ?? 0) === 0) {
+    await db.execute(`INSERT INTO "districts" (name, province, status) VALUES ('Sin Terminos', 'Córdoba', 'active')`);
   }
 });
 
@@ -63,9 +62,8 @@ describe('Districts', () => {
   const phone = '+5492615555555';
   const password = 'testPass123';
 
-  test('GET /districts returns active districts', async () => {
+  test('GET /districts returns active districts with terms', async () => {
     const token = await registerAndGetToken(phone, password);
-
     const { status, data } = await request('GET', '/api/districts', undefined, token);
 
     expect(status).toBe(200);
@@ -81,6 +79,56 @@ describe('Districts', () => {
     const names = data.districts.map((d: any) => d.name);
     expect(names).toContain('Villa Dolores');
     expect(names).toContain('Mina Clavero');
+    // 'Sin Terminos' should NOT appear (no terms_and_conditions)
+    expect(names).not.toContain('Sin Terminos');
+  });
+
+  test('GET /districts?province=Córdoba filters by province', async () => {
+    const token = await registerAndGetToken(phone, password);
+    const { status, data } = await request('GET', '/api/districts?province=Córdoba', undefined, token);
+
+    expect(status).toBe(200);
+    for (const d of data.districts) {
+      expect(d.province).toBe('Córdoba');
+    }
+  });
+
+  test('GET /districts?province=SanLuis returns empty', async () => {
+    const token = await registerAndGetToken(phone, password);
+    const { status, data } = await request('GET', '/api/districts?province=SanLuis', undefined, token);
+
+    expect(status).toBe(200);
+    expect(data.districts).toEqual([]);
+  });
+
+  test('GET /districts/provinces returns unique provinces', async () => {
+    const token = await registerAndGetToken(phone, password);
+    const { status, data } = await request('GET', '/api/districts/provinces', undefined, token);
+
+    expect(status).toBe(200);
+    expect(data.provinces).toBeArray();
+    expect(data.provinces).toContain('Córdoba');
+  });
+
+  test('GET /districts/:id returns detail with terms', async () => {
+    const token = await registerAndGetToken(phone, password);
+    // Get a known district id first
+    const listRes = await request('GET', '/api/districts', undefined, token);
+    const firstId = listRes.data.districts[0].id;
+
+    const { status, data } = await request('GET', `/api/districts/${firstId}`, undefined, token);
+
+    expect(status).toBe(200);
+    expect(data.id).toBe(firstId);
+    expect(data.terms_and_conditions).toBeString();
+    expect(data.privacy_policy).toBeString();
+  });
+
+  test('GET /districts/:nonexistent returns 404', async () => {
+    const token = await registerAndGetToken(phone, password);
+    const { status } = await request('GET', '/api/districts/00000000-0000-0000-0000-000000000000', undefined, token);
+
+    expect(status).toBe(404);
   });
 
   test('GET /districts without auth returns 401', async () => {
