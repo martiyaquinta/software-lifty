@@ -70,6 +70,25 @@ export const driverStatusSchema = z.object({
   kyc_status: z.string().optional(),
   documents_pending_review: z.boolean().optional(),
   admin_review_notes: z.string().nullable().optional(),
+  has_district: z.boolean().optional(),
+  district: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      province: z.string(),
+    })
+    .optional(),
+});
+
+export const districtSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  province: z.string(),
+});
+
+export const districtDetailSchema = districtSchema.extend({
+  terms_and_conditions: z.string().nullable(),
+  privacy_policy: z.string().nullable(),
 });
 
 export const tripStatusSchema = z.enum([
@@ -156,3 +175,5 @@ export type Trip = z.infer<typeof tripSchema>;
 export type TripStatus = z.infer<typeof tripStatusSchema>;
 export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
 export type DriverDocument = z.infer<typeof documentSchema>;
+export type District = z.infer<typeof districtSchema>;
+export type DistrictDetail = z.infer<typeof districtDetailSchema>;
