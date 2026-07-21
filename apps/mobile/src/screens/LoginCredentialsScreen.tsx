@@ -1,5 +1,6 @@
+import { useLocalSearchParams } from 'expo-router';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -30,18 +31,20 @@ export const LoginCredentialsScreen: React.FC = () => {
 
   const login = useLogin();
 
+  const { email: emailParam } = useLocalSearchParams<{ email?: string }>();
+  const termsAccepted = useAuthStore((s) => s.termsAccepted);
+
+  useEffect(() => {
+    if (emailParam && !username) {
+      setUsername(emailParam);
+    }
+  }, [emailParam]);
+
   const handleLogin = async () => {
     setError(null);
     try {
       const loginResult = await login.mutateAsync({ email: username.trim(), password });
-      console.log('[LoginCredentials] Login success, user:', loginResult.user?.id);
-    } catch (err: any) {
-      const message = err?.message ?? err?.response?.data?.message ?? 'Error al iniciar sesion';
-      setError(message);
-      return;
-    }
 
-    try {
       const { data: body } = await apiClient.get('/drivers/me/status');
       const payload = body?.data ?? body;
       const parsed = driverStatusSchema.safeParse(payload);
@@ -54,8 +57,13 @@ export const LoginCredentialsScreen: React.FC = () => {
         setError(route.blockedMessage);
         return;
       }
-      if (route.screen) {
-        navigation.navigate(route.screen);
+
+      if (termsAccepted) {
+        if (route.screen) {
+          navigation.navigate(route.screen);
+        }
+      } else {
+        navigation.navigate('Terms');
       }
     } catch (err: unknown) {
       const message =
