@@ -167,6 +167,7 @@ export const driversService = {
         id: drivers.id,
         is_online: drivers.is_online,
         documents_pending_review: drivers.documents_pending_review,
+        district_id: drivers.district_id,
       })
       .from(drivers)
       .where(eq(drivers.user_id, user.id))
@@ -179,6 +180,14 @@ export const driversService = {
         'No podes conectarte: tenes documentos pendientes de revision.',
         409,
         'DOCUMENTS_UNDER_REVIEW',
+      );
+    }
+
+    if (isOnline && !driver.district_id) {
+      throw new AppError(
+        'Debes seleccionar un municipio antes de conectarte.',
+        400,
+        'DISTRICT_REQUIRED',
       );
     }
 
