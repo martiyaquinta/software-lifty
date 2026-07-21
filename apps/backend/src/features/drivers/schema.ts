@@ -35,3 +35,7 @@ export const reuploadDocBody = t.Object({
   file: t.File({ maxSize: 10 * 1024 * 1024 }),
   doc_type: t.String({ minLength: 1 }),
 });
+
+export const setDistrictBody = t.Object({
+  district_id: t.String(),
+});

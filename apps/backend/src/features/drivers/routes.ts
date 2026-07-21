@@ -5,6 +5,7 @@ import {
   addDocumentBody,
   driverIdParams,
   reuploadDocBody,
+  setDistrictBody,
   toggleOnlineBody,
   updateProfileBody,
   uploadPhotoBody,
@@ -85,4 +86,10 @@ export const driversRoutes = new Elysia({ prefix: '/drivers' })
     '/me/photo',
     ({ user, body, set }) => safeCall(() => driversService.uploadPhoto(user, body.file), set),
     { body: uploadPhotoBody, requireAuth: true },
+  )
+  .put(
+    '/me/district',
+    ({ user, body, set }) =>
+      safeCall(() => driversService.setDistrict(user, body.district_id), set),
+    { body: setDistrictBody, requireAuth: true },
   );
