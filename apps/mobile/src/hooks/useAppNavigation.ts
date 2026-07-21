@@ -31,6 +31,8 @@ const SCREEN_TO_ROUTE = {
   PaymentMethod: '/payment-method',
   Withdraw: '/withdraw',
   SelectProvince: '/select-province',
+  SelectDistrict: '/select-district',
+  DistrictTerms: '/district-terms',
 } as const;
 
 export type ScreenName = keyof typeof SCREEN_TO_ROUTE;
@@ -47,6 +49,8 @@ const BACK_FALLBACK: Record<string, string> = {
   'kyc-verify': 'OnboardingStep1',
   'kyc-webview': 'KYCVerify',
   'waiting-approval': 'OnboardingStep2',
+  'select-district': 'SelectProvince',
+  'district-terms': 'SelectDistrict',
 };
 
 export function useAppNavigation() {
