@@ -15,6 +15,8 @@ import { Input } from '../components/Input';
 import { OTPInput } from '../components/OTPInput';
 import { useAppNavigation } from '../hooks/useAppNavigation';
 import { useForgotPassword, useResetPassword } from '../hooks/useAuth';
+import { resolvePostAuthRoute } from '../lib/postAuthRouting';
+import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
 
 export const ForgotPasswordScreen: React.FC = () => {
@@ -67,7 +69,21 @@ export const ForgotPasswordScreen: React.FC = () => {
 
     try {
       await resetPassword.mutateAsync({ email: email.trim(), code, password });
-      navigation.replace('LoginCredentials');
+
+      const route = await resolvePostAuthRoute();
+      if (route.blockedMessage) {
+        setError(route.blockedMessage);
+        return;
+      }
+
+      const termsAccepted = useAuthStore.getState().termsAccepted;
+      if (termsAccepted) {
+        if (route.screen) {
+          navigation.replace(route.screen);
+        }
+      } else {
+        navigation.replace('Terms');
+      }
     } catch (err: any) {
       const message = err?.message ?? 'Error al restablecer la contrasena';
       setError(message);
