@@ -1,12 +1,40 @@
 import type React from 'react';
+import { useState } from 'react';
 import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Navbar } from '../components/Navbar';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { resolvePostAuthRoute } from '../lib/postAuthRouting';
+import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
 
 export const TermsScreen: React.FC = () => {
   const navigation = useAppNavigation();
+  const setTermsAccepted = useAuthStore((s) => s.setTermsAccepted);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleAccept = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const route = await resolvePostAuthRoute();
+      if (route.blockedMessage) {
+        setError(route.blockedMessage);
+        return;
+      }
+      setTermsAccepted(true);
+      if (route.screen) {
+        navigation.replace(route.screen);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error al verificar tu cuenta';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={theme.colors.deepBlue} />
@@ -52,9 +80,12 @@ export const TermsScreen: React.FC = () => {
         <View style={{ height: 48 }} />
       </ScrollView>
       <View style={styles.footer}>
+        {error !== null && <Text style={styles.errorText}>{error}</Text>}
         <Button
-          title="ACEPTAR Y CONTINUAR"
-          onPress={() => navigation.navigate('OnboardingStep1')}
+          title={loading ? '' : 'ACEPTAR Y CONTINUAR'}
+          onPress={handleAccept}
+          loading={loading}
+          disabled={loading}
           style={styles.button}
         />
       </View>
@@ -101,6 +132,13 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.lg,
     backgroundColor: theme.colors.white,
     alignItems: 'center',
+  },
+  errorText: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.dangerRed,
+    textAlign: 'center',
+    marginBottom: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
   },
   button: {
     width: 327,

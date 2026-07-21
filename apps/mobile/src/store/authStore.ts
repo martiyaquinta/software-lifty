@@ -14,6 +14,8 @@ interface AuthState {
   driverStatus: DriverStatusValue;
   onboardingStep: string | null;
   kycSessionId: string | null;
+  termsAccepted: boolean;
+  setTermsAccepted: (accepted: boolean) => void;
   setSession: (token: string | null, userId?: string | null) => void;
   setDriverId: (driverId: string) => void;
   clearAuth: () => void;
@@ -37,6 +39,7 @@ export const useAuthStore = create<AuthState>()(
       driverStatus: null,
       onboardingStep: null,
       kycSessionId: null,
+      termsAccepted: false,
       setSession: (token, userId) =>
         set((state) => ({
           token,
@@ -55,12 +58,14 @@ export const useAuthStore = create<AuthState>()(
           driverStatus: null,
           onboardingStep: null,
           kycSessionId: null,
+          termsAccepted: false,
         }),
       resetRedirect: () => set({ needsRedirect: false }),
       setPhone: (phone) => set({ phone }),
       setDriverStatus: (driverStatus) => set({ driverStatus }),
       setOnboardingStep: (onboardingStep) => set({ onboardingStep }),
       setKycSessionId: (kycSessionId) => set({ kycSessionId }),
+      setTermsAccepted: (termsAccepted) => set({ termsAccepted }),
       setSessionRestored: (sessionRestored) => set({ sessionRestored }),
     }),
     {
@@ -73,6 +78,7 @@ export const useAuthStore = create<AuthState>()(
         driverStatus: state.driverStatus,
         onboardingStep: state.onboardingStep,
         kycSessionId: state.kycSessionId,
+        termsAccepted: state.termsAccepted,
       }),
     },
   ),

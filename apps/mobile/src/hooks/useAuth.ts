@@ -45,7 +45,10 @@ export function useResendCode() {
 export function useForgotPassword() {
   return useMutation({
     mutationFn: async ({ email }: { email: string }) => {
-      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: false },
+      });
       if (error) throw error;
       return { message: 'Codigo enviado' };
     },
@@ -63,12 +66,16 @@ export function useResetPassword() {
       code: string;
       password: string;
     }) => {
-      const { error: verifyError } = await supabase.auth.verifyOtp({
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({
         email,
         token: code,
-        type: 'recovery',
+        type: 'email',
       });
       if (verifyError) throw verifyError;
+
+      if (!data.session) {
+        throw new Error('No se pudo verificar la identidad. Intenta de nuevo.');
+      }
 
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;

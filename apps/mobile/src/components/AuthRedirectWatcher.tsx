@@ -8,6 +8,8 @@ import { useAuthStore } from '../store/authStore';
 
 const PUBLIC_ROUTES = ['', 'register', 'forgot-password'];
 
+const AUTH_FLOW_ROUTES = ['login-credentials', 'terms', 'register', 'forgot-password', 'auth'];
+
 export function AuthRedirectWatcher() {
   const needsRedirect = useAuthStore((s) => s.needsRedirect);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -22,7 +24,8 @@ export function AuthRedirectWatcher() {
   useEffect(() => {
     if (needsRedirect) {
       resetRedirect();
-      if (segments[0] !== undefined) {
+      const current = segments[0] ?? '';
+      if (current !== undefined && !AUTH_FLOW_ROUTES.includes(current)) {
         InteractionManager.runAfterInteractions(() => {
           router.replace('/');
         });
