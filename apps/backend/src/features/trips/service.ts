@@ -1,9 +1,11 @@
 import { and, desc, eq, inArray, not, sql } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
 import { getDriverId } from '../../shared/db/queries';
-import { tripEvents, trips } from '../../shared/db/schema';
+import { drivers, tripEvents, trips } from '../../shared/db/schema';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
+import { logger } from '../../shared/lib/logger';
 import { calculateFare } from '../../shared/lib/pricing';
+import { sendPushToUser } from '../../shared/lib/push';
 import type { AuthUser } from '../../shared/middleware/auth';
 import { ratingsService } from '../ratings/service';
 
@@ -15,6 +17,38 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
   in_trip: ['completed', 'cancelled'],
   completed: ['rated'],
 };
+
+function broadcastTripRequest(driverId: string, trip: any) {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !key) {
+    logger.warn('[BROADCAST] Missing SUPABASE_URL or SUPABASE_SECRET_KEY');
+    return;
+  }
+
+  const topic = `driver:${driverId}`;
+  logger.info('[BROADCAST] Sending to', topic, 'tripId:', trip.id);
+
+  fetch(`${url}/realtime/v1/api/broadcast`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      messages: [
+        {
+          topic,
+          event: 'trip:request',
+          payload: trip,
+        },
+      ],
+    }),
+  })
+    .then((res) => logger.info('[BROADCAST] Response:', res.status))
+    .catch((err) => logger.error('[BROADCAST] Error:', (err as Error).message));
+}
 
 const TERMINAL_STATUSES = [
   'completed',
@@ -89,41 +123,45 @@ export const tripService = {
   async createTrip(user: AuthUser, data: any) {
     const driverId = await getDriverId(user);
 
-    let fareData: Record<string, any> = {};
-    if (data.vehicle_type && data.distance_km && data.duration_minutes) {
-      const fare = calculateFare({
-        vehicle_type: data.vehicle_type,
-        distance_km: data.distance_km,
-        duration_minutes: data.duration_minutes,
-      });
-      fareData = {
-        base_fare: fare.base_fare,
-        distance_fare: fare.distance_fare,
-        time_fare: fare.time_fare,
-        total_fare: fare.total,
-        platform_fee: fare.platform_fee,
-        driver_earnings: fare.driver_earnings,
-      };
-    }
+    const fare = calculateFare({
+      vehicle_type: data.vehicle_type,
+      distance_km: data.distance_km,
+      duration_minutes: data.duration_minutes,
+    });
 
     const [trip] = await db
       .insert(trips)
       .values({
         driver_id: driverId,
+        passenger_id: data.passenger_id ?? null,
         origin_lat: data.origin_lat,
         origin_lng: data.origin_lng,
         dest_lat: data.dest_lat,
         dest_lng: data.dest_lng,
         origin_address: data.origin_address ?? null,
         dest_address: data.dest_address ?? null,
-        distance_km: data.distance_km ?? null,
-        duration_minutes: data.duration_minutes ?? null,
+        distance_km: data.distance_km,
+        duration_minutes: data.duration_minutes,
+        base_fare: fare.base_fare,
+        distance_fare: fare.distance_fare,
+        time_fare: fare.time_fare,
+        total_fare: fare.total,
+        platform_fee: fare.platform_fee,
+        driver_earnings: fare.driver_earnings,
         status: 'request_received',
-        ...fareData,
       })
       .returning();
 
     await recordEvent(trip.id, null, 'request_received');
+
+    broadcastTripRequest(driverId, trip);
+
+    sendPushToUser(user.id, {
+      title: 'Nuevo viaje',
+      body: `Viaje solicitado de ${data.origin_address ?? 'origen'} a ${data.dest_address ?? 'destino'} — $${fare.total}`,
+      data: { trip_id: trip.id, type: 'trip:request' },
+    });
+
     return trip;
   },
 
@@ -154,7 +192,8 @@ export const tripService = {
 
   async completeTrip(user: AuthUser, tripId: string) {
     const driverId = await getDriverId(user);
-    return transitionTrip(driverId, tripId, 'completed');
+    const trip = await transitionTrip(driverId, tripId, 'completed');
+    return trip;
   },
 
   async cancelTrip(user: AuthUser, tripId: string) {
@@ -194,24 +233,37 @@ export const tripService = {
     return findTrip(driverId, tripId);
   },
 
-  async collectTrip(user: AuthUser, tripId: string) {
+  async collectTrip(user: AuthUser, tripId: string, paymentMethod: 'cash' | 'mercadopago') {
     const driverId = await getDriverId(user);
-    const trip = await findTrip(driverId, tripId);
 
-    if (trip.status !== 'completed') {
-      throw new AppError('Trip must be completed before collecting payment', 400, 'BAD_REQUEST');
-    }
+    return db.transaction(async (tx) => {
+      const trip = await findTrip(driverId, tripId, tx);
 
-    if (trip.is_collected) {
-      throw new AppError('Payment already collected for this trip', 400, 'BAD_REQUEST');
-    }
+      if (trip.status !== 'completed') {
+        throw new AppError('Trip must be completed before collecting payment', 400, 'BAD_REQUEST');
+      }
 
-    const [updated] = await db
-      .update(trips)
-      .set({ is_collected: true, updated_at: new Date() })
-      .where(eq(trips.id, tripId))
-      .returning();
+      if (trip.is_collected) {
+        throw new AppError('Payment already collected for this trip', 400, 'BAD_REQUEST');
+      }
 
-    return updated;
+      const [updated] = await tx
+        .update(trips)
+        .set({ is_collected: true, payment_method: paymentMethod, updated_at: new Date() })
+        .where(eq(trips.id, tripId))
+        .returning();
+
+      if (paymentMethod === 'cash' && trip.platform_fee) {
+        await tx
+          .update(drivers)
+          .set({
+            platform_debt: sql`${drivers.platform_debt} + ${trip.platform_fee}`,
+            updated_at: new Date(),
+          })
+          .where(eq(drivers.id, driverId));
+      }
+
+      return updated;
+    });
   },
 };

@@ -16,6 +16,7 @@ export const TripCompleteScreen: React.FC = () => {
   const clearTrip = useTripStore((s) => s.clearTrip);
   const [activeTab, setActiveTab] = React.useState<'home' | 'earnings' | 'profile'>('home');
   const [collecting, setCollecting] = React.useState(false);
+  const [collectingMP, setCollectingMP] = React.useState(false);
 
   const { amount, commission, driverEarnings } = useLocalSearchParams<{
     amount?: string;
@@ -50,7 +51,7 @@ export const TripCompleteScreen: React.FC = () => {
     if (!activeTripId) return;
     setCollecting(true);
     try {
-      await apiClient.put(`/trips/${activeTripId}/collect`);
+      await apiClient.put(`/trips/${activeTripId}/collect`, { payment_method: 'cash' });
       Alert.alert('Cobrado', 'El viaje fue cobrado exitosamente.', [
         {
           text: 'OK',
@@ -64,6 +65,27 @@ export const TripCompleteScreen: React.FC = () => {
       Alert.alert('Error', 'No se pudo registrar el cobro.');
     } finally {
       setCollecting(false);
+    }
+  };
+
+  const handleCollectMP = async () => {
+    if (!activeTripId) return;
+    setCollectingMP(true);
+    try {
+      await apiClient.put(`/trips/${activeTripId}/collect`, { payment_method: 'mercadopago' });
+      Alert.alert('Cobrado', 'El viaje fue cobrado exitosamente por Mercado Pago.', [
+        {
+          text: 'OK',
+          onPress: () => {
+            clearTrip();
+            navigation.navigate('Online');
+          },
+        },
+      ]);
+    } catch {
+      Alert.alert('Error', 'No se pudo registrar el cobro.');
+    } finally {
+      setCollectingMP(false);
     }
   };
 
@@ -106,6 +128,13 @@ export const TripCompleteScreen: React.FC = () => {
           title="Cobre en efectivo"
           onPress={handleCollect}
           loading={collecting}
+          style={styles.button}
+        />
+        <Button
+          title="Cobre por Mercado Pago"
+          onPress={handleCollectMP}
+          loading={collectingMP}
+          variant="secondary"
           style={styles.button}
         />
         <Button
