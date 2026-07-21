@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { eq } from 'drizzle-orm';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
-import { driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
+import { districts, driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
 import { DOC_TYPES } from '../../shared/lib/documents';
 import { getRedis } from '../../shared/lib/redis';
 import { createTestToken } from '../../shared/testing/utils';
@@ -185,8 +185,18 @@ describe('Driver Profile', () => {
   });
 
   test('PUT /me/online toggles status', async () => {
-    const { token } = await registerAndGetToken(phone, password);
+    const { token, userId } = await registerAndGetToken(phone, password);
     await request('POST', '/api/onboarding/step1', { full_name: 'Test' }, token);
+    const db = getDb();
+    const [district] = await db
+      .select({ id: districts.id })
+      .from(districts)
+      .orderBy(districts.name)
+      .limit(1);
+    await db
+      .update(drivers)
+      .set({ status: 'approved', district_id: district.id })
+      .where(eq(drivers.user_id, userId));
 
     const { status, data } = await request(
       'PUT',
@@ -207,7 +217,6 @@ describe('Driver Profile', () => {
     expect(s2).toBe(200);
     expect(d2.is_online).toBe(false);
 
-    const db = getDb();
     const [user] = await db
       .select({ id: users.id })
       .from(users)
