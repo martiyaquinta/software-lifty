@@ -122,6 +122,9 @@ describe('SOS', () => {
         origin_lng: -65.0,
         dest_lat: -31.88,
         dest_lng: -65.02,
+        vehicle_type: 'car',
+        distance_km: 5,
+        duration_minutes: 10,
       },
       token,
     );

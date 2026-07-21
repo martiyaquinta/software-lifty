@@ -7,6 +7,7 @@ import { Elysia } from 'elysia';
 import { db } from '../db/client';
 import { users } from '../db/schema';
 import { getRedis } from '../lib/redis';
+import { createAuthPlugin } from './auth';
 import { createTestAuthPlugin, createTestToken } from '../testing/utils';
 
 let app: any;
@@ -67,16 +68,36 @@ describe('authPlugin', () => {
   });
 
   test('returns authenticated for known user', async () => {
+    const userId = '11111111-1111-4111-8111-111111111111';
     await db
       .insert(users)
-      .values({ id: 'test-user-1', role: 'driver', phone: '+1234567890' })
+      .values({ id: userId, role: 'driver', phone: '+1234567890' })
       .returning();
 
-    const token = createTestToken('test-user-1');
+    const token = createTestToken(userId);
     const res = await makeRequest(token);
     expect(res.user).not.toBeNull();
-    expect(res.user.id).toBe('test-user-1');
+    expect(res.user.id).toBe(userId);
     expect(res.user.role).toBe('driver');
+    expect(res.authStatus).toBe('authenticated');
+  });
+
+  test('real auth plugin falls back to test token lookup in test env', async () => {
+    app = new Elysia()
+      .use(createAuthPlugin())
+      .get('/test', ({ user, authStatus }) => ({ user: user ?? null, authStatus }));
+
+    const userId = '22222222-2222-4222-8222-222222222222';
+
+    await db
+      .insert(users)
+      .values({ id: userId, role: 'driver', phone: '+1234567890' })
+      .returning();
+
+    const token = createTestToken(userId);
+    const res = await makeRequest(token);
+    expect(res.user).not.toBeNull();
+    expect(res.user.id).toBe(userId);
     expect(res.authStatus).toBe('authenticated');
   });
 });
