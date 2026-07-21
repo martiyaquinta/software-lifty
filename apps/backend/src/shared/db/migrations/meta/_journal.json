@@ -162,6 +162,20 @@
       "when": 1753464375000,
       "tag": "0021_drop_auth_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1783520000000,
+      "tag": "0022_platform_debt",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1783570000000,
+      "tag": "0023_driver_approval_columns",
+      "breakpoints": true
     }
   ]
 }
