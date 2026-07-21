@@ -43,7 +43,10 @@ export const LoginCredentialsScreen: React.FC = () => {
   const handleLogin = async () => {
     setError(null);
     try {
-      await login.mutateAsync({ email: username.trim(), password });
+      const result = await login.mutateAsync({ email: username.trim(), password });
+      if (result.access_token) {
+        useAuthStore.getState().setSession(result.access_token, result.user?.id ?? null);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al iniciar sesion';
       setError(message);
