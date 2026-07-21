@@ -522,53 +522,55 @@ export const driversService = {
   },
 
   async setDistrict(user: AuthUser, districtId: string) {
-    const [driver] = await db
-      .select({
-        id: drivers.id,
-        status: drivers.status,
-        district_id: drivers.district_id,
-      })
-      .from(drivers)
-      .where(eq(drivers.user_id, user.id))
-      .limit(1);
+    return await db.transaction(async (tx) => {
+      const [driver] = await tx
+        .select({
+          id: drivers.id,
+          status: drivers.status,
+          district_id: drivers.district_id,
+        })
+        .from(drivers)
+        .where(eq(drivers.user_id, user.id))
+        .limit(1);
 
-    if (!driver) throw new NotFoundError('Driver profile not found');
-    if (driver.status !== 'approved') {
-      throw new AppError('Debes estar aprobado para elegir un municipio', 400, 'NOT_APPROVED');
-    }
-    if (driver.district_id) {
-      throw new AppError(
-        'Ya tenes un municipio asignado y no se puede cambiar',
-        409,
-        'DISTRICT_ALREADY_SET',
-      );
-    }
+      if (!driver) throw new NotFoundError('Driver profile not found');
+      if (driver.status !== 'approved') {
+        throw new AppError('Debes estar aprobado para elegir un municipio', 400, 'NOT_APPROVED');
+      }
+      if (driver.district_id) {
+        throw new AppError(
+          'Ya tenes un municipio asignado y no se puede cambiar',
+          409,
+          'DISTRICT_ALREADY_SET',
+        );
+      }
 
-    const [district] = await db
-      .select({
-        id: districts.id,
-        name: districts.name,
-        province: districts.province,
-        terms_and_conditions: districts.terms_and_conditions,
-      })
-      .from(districts)
-      .where(and(eq(districts.id, districtId), eq(districts.status, 'active')))
-      .limit(1);
+      const [district] = await tx
+        .select({
+          id: districts.id,
+          name: districts.name,
+          province: districts.province,
+          terms_and_conditions: districts.terms_and_conditions,
+        })
+        .from(districts)
+        .where(and(eq(districts.id, districtId), eq(districts.status, 'active')))
+        .limit(1);
 
-    if (!district || !district.terms_and_conditions) {
-      throw new AppError('Municipio no encontrado o no disponible', 404, 'DISTRICT_NOT_FOUND');
-    }
+      if (!district || !district.terms_and_conditions) {
+        throw new AppError('Municipio no encontrado o no disponible', 404, 'DISTRICT_NOT_FOUND');
+      }
 
-    await db
-      .update(drivers)
-      .set({ district_id: districtId, updated_at: new Date() })
-      .where(eq(drivers.id, driver.id));
+      await tx
+        .update(drivers)
+        .set({ district_id: districtId, updated_at: new Date() })
+        .where(eq(drivers.id, driver.id));
 
-    return {
-      district_id: district.id,
-      district_name: district.name,
-      district_province: district.province,
-    };
+      return {
+        district_id: district.id,
+        district_name: district.name,
+        district_province: district.province,
+      };
+    });
   },
 
   async getMyDistrict(
