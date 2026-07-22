@@ -23,10 +23,6 @@ export const STEP_ROUTE: Record<string, StepRoute> = {
   documents: { screen: 'OnboardingStep2', storeStatus: 'pending' },
   review: { screen: 'WaitingApproval', storeStatus: 'under_review' },
   approved: { screen: 'Online', storeStatus: 'approved' },
-  // legacy step names (older backend responses)
-  step1: { screen: 'OnboardingStep1', storeStatus: 'pending' },
-  step2: { screen: 'OnboardingVehicle', storeStatus: 'pending' },
-  step3: { screen: 'OnboardingStep2', storeStatus: 'pending' },
 };
 
 /**

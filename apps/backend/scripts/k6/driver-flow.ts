@@ -37,18 +37,15 @@ export default function () {
   const token = JSON.parse(regRes.body as string).access_token;
   if (!token) return;
 
-  const driverRes = http.post(
-    `${BASE}/api/onboarding/step1`,
+  const driverRes = http.put(
+    `${BASE}/api/drivers/me`,
     JSON.stringify({
       first_name: "Load",
       last_name: "Test",
-      birth_date: "1990-01-01",
-      gender: "male",
-      phone,
     }),
     { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } },
   );
-  check(driverRes, { "step1 ok": (r) => r.status === 200 });
+  check(driverRes, { "profile ok": (r) => r.status === 200 });
 
   const mapsRes = http.get(`${BASE}/api/maps/places/autocomplete?input=Av`, {
     headers: { Authorization: `Bearer ${token}` },
