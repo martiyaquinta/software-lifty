@@ -113,6 +113,14 @@ export const driversService = {
       };
     }
 
+    if (driver.status === 'kyc_pending') {
+      return { status: 'pending', step: 'kyc', kyc_status: driver.kyc_status };
+    }
+
+    if (driver.status === 'kyc_approved') {
+      // fall through to vehicle check
+    }
+
     // KYC gate: identity must be verified before anything else.
     // But NOT if the driver is still in step1 (profile) — let them
     // complete their profile data before demanding KYC.
@@ -392,6 +400,59 @@ export const driversService = {
 
     const result = await this.getMyStatus(user);
     return { message: 'Document uploaded', status: result.status, step: result.step };
+  },
+
+  async uploadDocument(user: AuthUser, file: File, docType: string) {
+    if (!VALID_DOC_TYPES.includes(docType)) {
+      throw new AppError(`Invalid doc_type: ${docType}`, 400, 'BAD_REQUEST');
+    }
+
+    const [driver] = await db
+      .select({ id: drivers.id, status: drivers.status, kyc_status: drivers.kyc_status })
+      .from(drivers)
+      .where(eq(drivers.user_id, user.id))
+      .limit(1);
+
+    if (!driver) throw new NotFoundError('Driver profile not found. Complete step 1 first');
+
+    if (driver.kyc_status !== 'approved') {
+      throw new AppError(
+        'Debes completar la verificacion de identidad (KYC) antes de subir documentos',
+        400,
+        'KYC_REQUIRED',
+      );
+    }
+
+    const path = `${driver.id}/${docType}-${Date.now()}`;
+    const fileUrl = await uploadFile(file, path);
+
+    await db.insert(driverDocuments).values({
+      driver_id: driver.id,
+      doc_type: docType,
+      file_url: fileUrl,
+    });
+
+    const docsList = await db
+      .select({ doc_type: driverDocuments.doc_type })
+      .from(driverDocuments)
+      .where(
+        and(
+          eq(driverDocuments.driver_id, driver.id),
+          ne(driverDocuments.status, 'superseded'),
+          ne(driverDocuments.status, 'rejected'),
+        ),
+      );
+
+    if (hasAllRequiredDocs(docsList) && driver.status !== 'approved') {
+      await db
+        .update(drivers)
+        .set({ status: 'review', admin_review_status: 'pending', updated_at: new Date() })
+        .where(eq(drivers.id, driver.id));
+
+      notifyAdminNewDriver(driver.id);
+    }
+
+    return { file_url: fileUrl };
   },
 
   async uploadPhoto(user: AuthUser, file: File) {

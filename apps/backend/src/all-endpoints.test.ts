@@ -10,7 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { eq } from 'drizzle-orm';
 import { createApp } from './index';
 import { getDb, resetDb } from './shared/db/client';
-import { users } from './shared/db/schema';
+import { drivers, users } from './shared/db/schema';
 import { getRedis } from './shared/lib/redis';
 import { createTestToken } from './shared/testing/utils';
 
@@ -95,13 +95,14 @@ async function registerWithUser(
 }
 
 async function driver(token: string): Promise<string> {
-  const { data } = await req('POST', '/api/onboarding/step1', { full_name: 'Test Driver' }, token);
+  const { data } = await req('PUT', '/api/drivers/me', { first_name: 'Test Driver' }, token);
   return data.id;
 }
 
 async function approveKyc(userId: string) {
   const db = getDb();
   await db.update(users).set({ kyc_status: 'approved' }).where(eq(users.id, userId));
+  await db.update(drivers).set({ kyc_status: 'approved' }).where(eq(drivers.user_id, userId));
 }
 
 beforeAll(() => {
@@ -161,168 +162,121 @@ describe('Auth', () => {
 
 });
 
-// ── Onboarding ──
-describe('Onboarding', () => {
-  test('step1 no auth → 401', async () => {
-    const { status } = await req('POST', '/api/onboarding/step1', { full_name: 'TD' });
+// ── Drivers ──
+describe('Drivers', () => {
+  test('updateProfile no auth → 401', async () => {
+    const { status } = await req('PUT', '/api/drivers/me', { first_name: 'TD' });
     expect(status).toBe(401);
   });
-  test('step1 → 200', async () => {
+  test('updateProfile creates driver → 200', async () => {
     const { token } = await registerWithUser('+54926100101');
-    const { status, data } = await req('POST', '/api/onboarding/step1', { full_name: 'JP' }, token);
+    const { status, data } = await req('PUT', '/api/drivers/me', { first_name: 'JP' }, token);
     expect(status).toBe(200);
     expect(data.id).toBeString();
-    expect(data.status).toBe('kyc_pending');
+    expect(data.message).toBe('Profile updated');
   });
-  test('step2 no step1 → 404', async () => {
+  test('vehicle data without KYC → 400', async () => {
     const { token } = await registerWithUser('+54926100102');
-    const { status } = await req(
-      'POST',
-      '/api/onboarding/step2',
-      {
-        brand: 'T',
-        model: 'C',
-        year: 2020,
-        color: 'W',
-        plate: 'ABC',
-      },
+    const { status, data } = await req(
+      'PUT',
+      '/api/drivers/me',
+      { vehicle_brand: 'T', vehicle_model: 'C', vehicle_year: 2020, vehicle_color: 'W', vehicle_plate: 'ABC' },
       token,
     );
-    expect(status).toBe(404);
+    expect(status).toBe(400);
+    expect(data.error.code).toBe('KYC_REQUIRED');
   });
-  test('step2 → 200', async () => {
+  test('vehicle registration after KYC → 200', async () => {
     const { token, userId } = await registerWithUser('+54926100103');
     await driver(token);
     await approveKyc(userId);
     const { status, data } = await req(
-      'POST',
-      '/api/onboarding/step2',
-      {
-        brand: 'T',
-        model: 'C',
-        year: 2020,
-        color: 'W',
-        plate: 'ABC',
-      },
+      'PUT',
+      '/api/drivers/me',
+      { vehicle_brand: 'T', vehicle_model: 'C', vehicle_year: 2020, vehicle_color: 'W', vehicle_plate: 'ABC' },
       token,
     );
     expect(status).toBe(200);
-    expect(data.vehicle_id).toBeString();
+    expect(data.id).toBeString();
   });
-  test('step3 → 200 docs', async () => {
+  test('add document → 200', async () => {
     const { token, userId } = await registerWithUser('+54926100104');
     await driver(token);
     await approveKyc(userId);
     await req(
-      'POST',
-      '/api/onboarding/step2',
-      {
-        brand: 'T',
-        model: 'C',
-        year: 2020,
-        color: 'W',
-        plate: 'ABC',
-      },
+      'PUT',
+      '/api/drivers/me',
+      { vehicle_brand: 'T', vehicle_model: 'C', vehicle_year: 2020, vehicle_color: 'W', vehicle_plate: 'ABC' },
       token,
     );
     const { status, data } = await req(
       'POST',
-      '/api/onboarding/step3',
-      {
-        documents: [{ doc_type: 'license_front', file_url: 'https://x.com/a.jpg' }],
-      },
+      '/api/drivers/me/documents',
+      { doc_type: 'license_front', file_url: 'https://x.com/a.jpg' },
       token,
     );
     expect(status).toBe(200);
-    expect(data.documents).toBeArray();
+    expect(data.message).toBe('Document uploaded');
   });
-  test('step3 invalid type → 400', async () => {
+  test('add document invalid type → 400', async () => {
     const { token, userId } = await registerWithUser('+54926100105');
     await driver(token);
     await approveKyc(userId);
     await req(
-      'POST',
-      '/api/onboarding/step2',
-      {
-        brand: 'T',
-        model: 'C',
-        year: 2020,
-        color: 'W',
-        plate: 'ABC',
-      },
+      'PUT',
+      '/api/drivers/me',
+      { vehicle_brand: 'T', vehicle_model: 'C', vehicle_year: 2020, vehicle_color: 'W', vehicle_plate: 'ABC' },
       token,
     );
     const { status } = await req(
       'POST',
-      '/api/onboarding/step3',
-      {
-        documents: [{ doc_type: 'bad', file_url: 'https://x.com/x.jpg' }],
-      },
+      '/api/drivers/me/documents',
+      { doc_type: 'bad', file_url: 'https://x.com/x.jpg' },
       token,
     );
     expect(status).toBe(400);
   });
-  test('status → 200', async () => {
+  test('status after vehicle → documents step', async () => {
     const { token, userId } = await registerWithUser('+54926100106');
     await driver(token);
     await approveKyc(userId);
     await req(
-      'POST',
-      '/api/onboarding/step2',
-      {
-        brand: 'T',
-        model: 'C',
-        year: 2020,
-        color: 'W',
-        plate: 'ABC',
-      },
+      'PUT',
+      '/api/drivers/me',
+      { vehicle_brand: 'T', vehicle_model: 'C', vehicle_year: 2020, vehicle_color: 'W', vehicle_plate: 'ABC' },
       token,
     );
-    const { status, data } = await req('GET', '/api/onboarding/status', undefined, token);
+    const { status, data } = await req('GET', '/api/drivers/me/status', undefined, token);
     expect(status).toBe(200);
     expect(data.step).toBe('documents');
   });
-  test('status no driver → step1', async () => {
+  test('status no driver → profile step', async () => {
     const { token } = await registerWithUser('+54926100107');
-    const { status, data } = await req('GET', '/api/onboarding/status', undefined, token);
+    const { status, data } = await req('GET', '/api/drivers/me/status', undefined, token);
     expect(status).toBe(200);
-    expect(data.step).toBe('step1');
+    expect(data.step).toBe('profile');
   });
-  test('step3/upload → 200', async () => {
+  test('add document via JSON → 200', async () => {
     const { token, userId } = await registerWithUser('+54926100108');
     await driver(token);
     await approveKyc(userId);
     await req(
-      'POST',
-      '/api/onboarding/step2',
-      {
-        brand: 'T',
-        model: 'C',
-        year: 2020,
-        color: 'W',
-        plate: 'ABC',
-      },
+      'PUT',
+      '/api/drivers/me',
+      { vehicle_brand: 'T', vehicle_model: 'C', vehicle_year: 2020, vehicle_color: 'W', vehicle_plate: 'ABC' },
       token,
     );
-    const fd = new FormData();
-    fd.append('file', new Blob(['c']), 'doc.png');
-    fd.append('doc_type', 'license_front');
-    const r = new Request('http://localhost/api/onboarding/step3/upload', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: fd,
-    });
-    expect((await app.handle(r)).status).toBe(200);
+    const { status } = await req(
+      'POST',
+      '/api/drivers/me/documents',
+      { doc_type: 'license_front', file_url: 'https://x.com/doc.png' },
+      token,
+    );
+    expect(status).toBe(200);
   });
-  test('step3/upload no auth → 401', async () => {
-    const fd = new FormData();
-    fd.append('file', new Blob(['x']), 'x.png');
-    fd.append('doc_type', 'license_front');
-    const r = new Request('http://localhost/api/onboarding/step3/upload', {
-      method: 'POST',
-      body: fd,
-    });
-    expect((await app.handle(r)).status).toBe(401);
+  test('add document no auth → 401', async () => {
+    const { status } = await req('POST', '/api/drivers/me/documents', { doc_type: 'license_front', file_url: 'https://x.com/x.png' });
+    expect(status).toBe(401);
   });
 });
 

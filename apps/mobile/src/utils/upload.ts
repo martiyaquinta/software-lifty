@@ -37,7 +37,7 @@ export async function uploadDocumentToBackend(
   formData.append('file', { uri, type: mimeType, name: fileName } as any);
   formData.append('doc_type', toBackendDocType(docBase, side));
 
-  const { data } = await apiClient.post('/onboarding/step3/upload', formData, {
+  const { data } = await apiClient.post('/drivers/me/documents/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 

@@ -31,6 +31,11 @@ export const uploadPhotoBody = t.Object({
   file: t.File({ maxSize: 10 * 1024 * 1024 }),
 });
 
+export const uploadDocBody = t.Object({
+  file: t.File({ maxSize: 10 * 1024 * 1024 }),
+  doc_type: t.String({ minLength: 1 }),
+});
+
 export const reuploadDocBody = t.Object({
   file: t.File({ maxSize: 10 * 1024 * 1024 }),
   doc_type: t.String({ minLength: 1 }),
