@@ -109,6 +109,11 @@ async function wsSendAndWait(message: object, ws: WebSocket, driverId: string): 
   });
 }
 
+async function wsSendRaw(message: string, ws: WebSocket): Promise<void> {
+  ws.send(message);
+  await new Promise((r) => setTimeout(r, 300));
+}
+
 import { eq } from 'drizzle-orm';
 import { findNearbyOnlineDrivers } from './service';
 
@@ -270,6 +275,100 @@ describe('Location WebSocket', () => {
     const { code } = await wsExpectClose(port, token);
     expect([4001, 1006]).toContain(code);
   });
+
+  test('WS ignores message missing lat/lng', async () => {
+    const { token, driverId } = await registerAndCreateDriver(phone, password);
+    const { ws, open } = await wsConnect(port, token);
+    expect(open).toBe(true);
+
+    await wsSendRaw(JSON.stringify({ foo: 'bar' }), ws);
+
+    const [loc] = await getDb()
+      .select()
+      .from(driverLocations)
+      .where(eq(driverLocations.driver_id, driverId))
+      .limit(1);
+    expect(loc).toBeUndefined();
+
+    await wsSendAndWait({ lat: -32.89, lng: -68.84 }, ws, driverId);
+    ws.close();
+    await new Promise((r) => setTimeout(r, 200));
+
+    const [validLoc] = await getDb()
+      .select()
+      .from(driverLocations)
+      .where(eq(driverLocations.driver_id, driverId))
+      .limit(1);
+    expect(validLoc).toBeDefined();
+  });
+
+  test(
+    'WS ignores message with non-numeric lat/lng',
+    async () => {
+      const { token, driverId } = await registerAndCreateDriver(phone, password);
+      const { ws, open } = await wsConnect(port, token);
+      expect(open).toBe(true);
+
+      await wsSendRaw(JSON.stringify({ lat: 'abc', lng: 'def' }), ws);
+
+      const [loc] = await getDb()
+        .select()
+        .from(driverLocations)
+        .where(eq(driverLocations.driver_id, driverId))
+        .limit(1);
+      expect(loc).toBeUndefined();
+
+      await wsSendAndWait({ lat: -32.89, lng: -68.84 }, ws, driverId);
+      ws.close();
+      await new Promise((r) => setTimeout(r, 200));
+
+      const [validLoc] = await getDb()
+        .select()
+        .from(driverLocations)
+        .where(eq(driverLocations.driver_id, driverId))
+        .limit(1);
+      expect(validLoc).toBeDefined();
+    },
+    { timeout: 15000 },
+  );
+
+  test(
+    'WS upsert overwrites previous location',
+    async () => {
+      const { token, driverId } = await registerAndCreateDriver(phone, password);
+      const { ws, open } = await wsConnect(port, token);
+      expect(open).toBe(true);
+
+      await wsSendAndWait({ lat: 10.0, lng: 20.0 }, ws, driverId);
+      ws.close();
+      await new Promise((r) => setTimeout(r, 300));
+
+      const [first] = await getDb()
+        .select()
+        .from(driverLocations)
+        .where(eq(driverLocations.driver_id, driverId))
+        .limit(1);
+      expect(first).toBeDefined();
+      expect(first!.lat).toBeCloseTo(10.0, 1);
+      expect(first!.lng).toBeCloseTo(20.0, 1);
+
+      const { ws: ws2 } = await wsConnect(port, token);
+      await wsSendAndWait({ lat: 30.0, lng: 40.0 }, ws2, driverId);
+      ws2.close();
+      await new Promise((r) => setTimeout(r, 300));
+
+      const [second] = await getDb()
+        .select()
+        .from(driverLocations)
+        .where(eq(driverLocations.driver_id, driverId))
+        .limit(1);
+      expect(second).toBeDefined();
+      expect(second!.lat).toBeCloseTo(30.0, 1);
+      expect(second!.lng).toBeCloseTo(40.0, 1);
+      expect(second!.updated_at.getTime()).toBeGreaterThanOrEqual(first!.updated_at.getTime());
+    },
+    { timeout: 20000 },
+  );
 });
 
 describe('findNearbyOnlineDrivers', () => {
