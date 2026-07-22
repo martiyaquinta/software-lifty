@@ -148,28 +148,39 @@ export const EarningsScreen: React.FC = () => {
             </Card>
 
             {earnings.trips && earnings.trips.length > 0 && (
-              <Card>
-                <Text style={styles.cardTitle}>Viajes de hoy</Text>
-                {earnings.trips.map((trip) => (
-                  <View key={trip.id} style={styles.tripRow}>
-                    <View style={styles.tripLeft}>
-                      <Text style={styles.tripTime}>{formatTime(trip.created_at)}</Text>
-                      <Text style={styles.tripOrigin} numberOfLines={1}>
-                        {shortAddress(trip.origin_address ?? '')}
-                      </Text>
+              <>
+                <Card>
+                  <Text style={styles.cardTitle}>Viajes de hoy</Text>
+                  {earnings.trips.map((trip) => (
+                    <View key={trip.id} style={styles.tripRow}>
+                      <View style={styles.tripLeft}>
+                        <Text style={styles.tripTime}>{formatTime(trip.created_at)}</Text>
+                        <Text style={styles.tripOrigin} numberOfLines={1}>
+                          {shortAddress(trip.origin_address ?? '')}
+                        </Text>
+                      </View>
+                      <View style={styles.tripRight}>
+                        <Text style={styles.tripAmount}>
+                          {formatCurrency(trip.total_fare ?? 0)}
+                        </Text>
+                        <Text style={styles.tripRetention}>
+                          Retencion -{formatCurrency(trip.platform_fee ?? 0)}
+                        </Text>
+                        <Text style={styles.tripNet}>
+                          Recibis {formatCurrency(trip.driver_earnings ?? 0)}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.tripRight}>
-                      <Text style={styles.tripAmount}>{formatCurrency(trip.total_fare ?? 0)}</Text>
-                      <Text style={styles.tripRetention}>
-                        Retencion -{formatCurrency(trip.platform_fee ?? 0)}
-                      </Text>
-                      <Text style={styles.tripNet}>
-                        Recibis {formatCurrency(trip.driver_earnings ?? 0)}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              </Card>
+                  ))}
+                </Card>
+                <TouchableOpacity
+                  style={styles.historyLink}
+                  onPress={() => navigation.navigate('TripHistory')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.historyLinkText}>Ver historial completo →</Text>
+                </TouchableOpacity>
+              </>
             )}
 
             <Card>
@@ -388,5 +399,14 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     color: theme.colors.turquoise,
     fontWeight: theme.fontWeight.medium,
+  },
+  historyLink: {
+    paddingVertical: theme.spacing.sm,
+    alignItems: 'center',
+  },
+  historyLinkText: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.turquoise,
   },
 });
