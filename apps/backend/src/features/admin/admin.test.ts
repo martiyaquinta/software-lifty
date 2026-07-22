@@ -54,19 +54,16 @@ async function createReviewDriver(): Promise<{ token: string; driverId: string }
     .returning({ id: users.id });
   const token = await createTestToken(user.id);
 
-  const { data: step1 } = await request('POST', '/api/onboarding/step1', { full_name: 'Test Driver' }, token);
+  const { data: step1 } = await request('PUT', '/api/drivers/me', { first_name: 'Test Driver' }, token);
   const driverId = step1.id;
 
   await db.update(drivers).set({ kyc_status: 'approved' }).where(eq(drivers.id, driverId));
 
-  await request('POST', '/api/onboarding/step2', { brand: 'Toyota', model: 'Corolla', year: 2022, color: 'Blanco', plate: 'ABC123' }, token);
+  await request('PUT', '/api/drivers/me', { vehicle_brand: 'Toyota', vehicle_model: 'Corolla', vehicle_year: 2022, vehicle_color: 'Blanco', vehicle_plate: 'ABC123' }, token);
 
-  await request('POST', '/api/onboarding/step3', {
-    documents: DOC_TYPES.map((doc_type) => ({
-      doc_type,
-      file_url: `https://example.com/${doc_type}.pdf`,
-    })),
-  }, token);
+  for (const doc_type of DOC_TYPES) {
+    await request('POST', '/api/drivers/me/documents', { doc_type, file_url: `https://example.com/${doc_type}.pdf` }, token);
+  }
 
   return { token, driverId };
 }

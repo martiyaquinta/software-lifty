@@ -50,9 +50,9 @@ async function registerAndGetTokenAndUser(phone: string, _password: string): Pro
 
 async function createDriver(token: string): Promise<string> {
   const { data } = await request(
-    'POST',
-    '/api/onboarding/step1',
-    { full_name: 'Test Driver' },
+    'PUT',
+    '/api/drivers/me',
+    { first_name: 'Test Driver' },
     token,
   );
   return data.id;

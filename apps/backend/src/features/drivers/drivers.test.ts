@@ -45,9 +45,9 @@ async function registerAndGetToken(phone: string, _password: string): Promise<{ 
 async function fullOnboarding(phone: string, password: string) {
   const { token, userId } = await registerAndGetToken(phone, password);
   const { data: step1Res } = await request(
-    'POST',
-    '/api/onboarding/step1',
-    { full_name: 'Juan Perez' },
+    'PUT',
+    '/api/drivers/me',
+    { first_name: 'Juan Perez' },
     token,
   );
   const driverId = step1Res.id;
@@ -55,9 +55,9 @@ async function fullOnboarding(phone: string, password: string) {
   await db.update(users).set({ kyc_status: 'approved' }).where(eq(users.id, userId));
   await db.update(drivers).set({ kyc_status: 'approved' }).where(eq(drivers.id, driverId));
   await request(
-    'POST',
-    '/api/onboarding/step2',
-    { brand: 'Toyota', model: 'Corolla', year: 2022, color: 'Blanco', plate: 'ABC123' },
+    'PUT',
+    '/api/drivers/me',
+    { vehicle_brand: 'Toyota', vehicle_model: 'Corolla', vehicle_year: 2022, vehicle_color: 'Blanco', vehicle_plate: 'ABC123' },
     token,
   );
   return { token, driverId, userId };
@@ -186,7 +186,7 @@ describe('Driver Profile', () => {
 
   test('PUT /me/online toggles status', async () => {
     const { token, userId } = await registerAndGetToken(phone, password);
-    await request('POST', '/api/onboarding/step1', { full_name: 'Test' }, token);
+    await request('PUT', '/api/drivers/me', { first_name: 'Test' }, token);
     const db = getDb();
     const [district] = await db
       .select({ id: districts.id })

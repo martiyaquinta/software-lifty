@@ -8,6 +8,7 @@ import {
   setDistrictBody,
   toggleOnlineBody,
   updateProfileBody,
+  uploadDocBody,
   uploadPhotoBody,
 } from './schema';
 import { driversService } from './service';
@@ -68,6 +69,12 @@ export const driversRoutes = new Elysia({ prefix: '/drivers' })
     '/me/documents',
     ({ user, body, set }) => safeCall(() => driversService.addDocument(user, body), set),
     { body: addDocumentBody, requireAuth: true },
+  )
+  .post(
+    '/me/documents/upload',
+    ({ user, body, set }) =>
+      safeCall(() => driversService.uploadDocument(user, body.file, body.doc_type), set),
+    { body: uploadDocBody, requireAuth: true },
   )
   .get(
     '/me/documents',

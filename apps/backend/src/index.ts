@@ -9,7 +9,6 @@ import { kycRoutes } from './features/kyc/routes';
 import { locationHttpPlugin, locationWsPlugin } from './features/location/routes';
 import { mapsRoutes } from './features/maps/routes';
 import { notificationsRoutes } from './features/notifications/routes';
-import { onboardingRoutes } from './features/onboarding/routes';
 import { paymentMethodsRoutes } from './features/payment-methods/routes';
 import { paymentsRoutes } from './features/payments/routes';
 import { ratingsRoutes } from './features/ratings/routes';
@@ -56,7 +55,6 @@ export function createApp(customAuthPlugin?: typeof authPlugin) {
           },
           tags: [
             { name: 'auth', description: 'Perfil y logout (auth via Supabase)' },
-            { name: 'onboarding', description: 'Onboarding del conductor (5 pasos)' },
             { name: 'kyc', description: 'Verificación de identidad DIDIT' },
             { name: 'trips', description: 'State machine de viajes' },
             { name: 'location', description: 'WebSocket ubicación en tiempo real' },
@@ -93,7 +91,6 @@ export function createApp(customAuthPlugin?: typeof authPlugin) {
         .use(adminApproveRoute)
         .use(adminRoutes)
         .use(paymentMethodsRoutes)
-        .use(onboardingRoutes)
         .use(kycRoutes)
         .use(tripRoutes)
         .use(mapsRoutes)
