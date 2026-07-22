@@ -370,6 +370,17 @@ export const driversService = {
       );
     }
 
+    await db
+      .update(driverDocuments)
+      .set({ status: 'superseded', superseded_at: new Date() })
+      .where(
+        and(
+          eq(driverDocuments.driver_id, driver.id),
+          eq(driverDocuments.doc_type, data.doc_type),
+          ne(driverDocuments.status, 'superseded'),
+        ),
+      );
+
     await db.insert(driverDocuments).values({
       driver_id: driver.id,
       doc_type: data.doc_type,
@@ -425,6 +436,17 @@ export const driversService = {
 
     const path = `${driver.id}/${docType}-${Date.now()}`;
     const fileUrl = await uploadFile(file, path);
+
+    await db
+      .update(driverDocuments)
+      .set({ status: 'superseded', superseded_at: new Date() })
+      .where(
+        and(
+          eq(driverDocuments.driver_id, driver.id),
+          eq(driverDocuments.doc_type, docType),
+          ne(driverDocuments.status, 'superseded'),
+        ),
+      );
 
     await db.insert(driverDocuments).values({
       driver_id: driver.id,
