@@ -8,6 +8,7 @@ import { getDb, resetDb } from '../../shared/db/client';
 import { districts, driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
 import { DOC_TYPES } from '../../shared/lib/documents';
 import { getRedis } from '../../shared/lib/redis';
+import { extractStoragePath } from '../../shared/lib/storage';
 import { createTestToken } from '../../shared/testing/utils';
 
 let app: any;
@@ -528,5 +529,80 @@ describe('Document step completeness', () => {
     );
     const data = await res.json();
     expect(data.step).toBe('review');
+  });
+});
+
+describe('Avatar photo upload', () => {
+  const phone = '+5492618888888';
+  const password = 'testPass123';
+
+  async function uploadPhoto(token: string) {
+    const formData = new FormData();
+    formData.append('file', new Blob(['image-data'], { type: 'image/png' }), 'avatar.png');
+    const req = new Request('http://localhost/api/drivers/me/photo', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    const res = await app.handle(req);
+    return { status: res.status, data: await res.json() };
+  }
+
+  test('POST /me/photo uploads avatar and sets avatar_url', async () => {
+    const { token } = await registerAndGetToken(phone, password);
+
+    const { status, data } = await uploadPhoto(token);
+
+    expect(status).toBe(200);
+    expect(data.file_url).toBeString();
+    expect(data.file_url).toContain('avatars/');
+
+    const { data: profile } = await request('GET', '/api/drivers/me', undefined, token);
+    expect(profile.avatar_url).toBe(data.file_url);
+  });
+
+  test('POST /me/photo replaces old avatar_url on re-upload', async () => {
+    const { token } = await registerAndGetToken(phone, password);
+
+    const { data: first } = await uploadPhoto(token);
+    const { data: second } = await uploadPhoto(token);
+
+    expect(second.file_url).not.toBe(first.file_url);
+
+    const { data: profile } = await request('GET', '/api/drivers/me', undefined, token);
+    expect(profile.avatar_url).toBe(second.file_url);
+  });
+
+  test('POST /me/photo without auth returns 401', async () => {
+    const formData = new FormData();
+    formData.append('file', new Blob(['data'], { type: 'image/png' }), 'avatar.png');
+    const req = new Request('http://localhost/api/drivers/me/photo', {
+      method: 'POST',
+      body: formData,
+    });
+    const res = await app.handle(req);
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('extractStoragePath', () => {
+  test('extracts path from public URL', () => {
+    const path = extractStoragePath(
+      'https://abc.supabase.co/storage/v1/object/public/driver-documents/avatars/user123-4567890',
+    );
+    expect(path).toBe('avatars/user123-4567890');
+  });
+
+  test('extracts path from mock URL', () => {
+    const path = extractStoragePath('mock://storage.lifty/avatars/user123-4567890');
+    expect(path).toBe('avatars/user123-4567890');
+  });
+
+  test('returns null for null input', () => {
+    expect(extractStoragePath(null)).toBeNull();
+  });
+
+  test('returns null for unrecognized URL format', () => {
+    expect(extractStoragePath('https://example.com/photo.jpg')).toBeNull();
   });
 });

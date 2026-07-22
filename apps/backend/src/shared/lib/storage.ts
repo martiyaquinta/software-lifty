@@ -57,3 +57,29 @@ export async function getSignedUrl(path: string, expiresIn = 3600): Promise<stri
   if (error) throw new Error(`Signed URL failed: ${error.message}`);
   return data.signedUrl;
 }
+
+export async function deleteFile(path: string): Promise<void> {
+  const client = getClient();
+  if (!client) {
+    logger.info('[STORAGE] Delete (mock):', path);
+    return;
+  }
+
+  try {
+    const { error } = await retry(() => client.storage.from('driver-documents').remove([path]));
+    if (error) {
+      logger.warn('[STORAGE] Delete failed', { path, error: error.message });
+    }
+  } catch (err) {
+    logger.warn('[STORAGE] Delete error', { path, error: (err as Error).message });
+  }
+}
+
+export function extractStoragePath(url: string | null): string | null {
+  if (!url) return null;
+
+  const match = url.match(
+    /(?:\/public\/driver-documents\/|\/sign\/driver-documents\/|mock:\/\/storage\.lifty\/)(.+)/,
+  );
+  return match ? match[1] : null;
+}

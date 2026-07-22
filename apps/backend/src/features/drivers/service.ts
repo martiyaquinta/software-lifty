@@ -11,7 +11,7 @@ import {
 import { DOC_TYPES } from '../../shared/lib/documents';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
-import { uploadFile } from '../../shared/lib/storage';
+import { deleteFile, extractStoragePath, uploadFile } from '../../shared/lib/storage';
 import type { AuthUser } from '../../shared/middleware/auth';
 import { notifyAdminNewDriver } from '../admin/notifications';
 
@@ -514,6 +514,17 @@ export const driversService = {
       .from(drivers)
       .where(eq(drivers.user_id, user.id))
       .limit(1);
+
+    const [currentUser] = await db
+      .select({ avatar_url: users.avatar_url })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
+
+    const oldPath = extractStoragePath(currentUser?.avatar_url ?? null);
+    if (oldPath) {
+      await deleteFile(oldPath);
+    }
 
     const path = `avatars/${driver?.id ?? user.id}-${Date.now()}`;
     const fileUrl = await uploadFile(file, path);
