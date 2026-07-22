@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { authGuard } from '../../shared/middleware/require-auth';
-import { collectBody, createTripBody, rateTripBody, tripIdParams } from './schema';
+import { collectBody, createTripBody, tripIdParams } from './schema';
 import { tripService } from './service';
 
 import { safeCall } from '../../shared/lib/route-utils';
@@ -62,15 +62,6 @@ export const tripRoutes = new Elysia({ prefix: '/trips' })
     '/:id/cancel',
     ({ user, params, set }) => safeCall(() => tripService.cancelTrip(user, params.id), set),
     { params: tripIdParams, requireAuth: true },
-  )
-  .post(
-    '/:id/rate',
-    ({ user, params, body, set }) =>
-      safeCall(
-        () => tripService.rateTrip(user, params.id, body.rating, body.comment, body.tags),
-        set,
-      ),
-    { params: tripIdParams, body: rateTripBody, requireAuth: true },
   )
   .put(
     '/:id/collect',

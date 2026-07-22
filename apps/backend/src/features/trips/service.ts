@@ -7,7 +7,6 @@ import { logger } from '../../shared/lib/logger';
 import { calculateFare, calculatePlatformFee } from '../../shared/lib/pricing';
 import { sendPushToUser } from '../../shared/lib/push';
 import type { AuthUser } from '../../shared/middleware/auth';
-import { ratingsService } from '../ratings/service';
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   request_received: ['accepted', 'rejected', 'cancelled'],
@@ -217,10 +216,6 @@ export const tripService = {
   async cancelTrip(user: AuthUser, tripId: string) {
     const driverId = await getDriverId(user);
     return transitionTrip(driverId, tripId, 'cancelled');
-  },
-
-  async rateTrip(user: AuthUser, tripId: string, rating: number, comment?: string, tags?: string) {
-    return ratingsService.rateTrip(user, tripId, { rating, tags, comment });
   },
 
   async getActiveTrip(user: AuthUser) {
