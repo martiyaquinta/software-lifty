@@ -1,6 +1,13 @@
 import { and, eq, ne } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
-import { districts, driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
+import {
+  districts,
+  driverDocuments,
+  driverLocations,
+  drivers,
+  users,
+  vehicles,
+} from '../../shared/db/schema';
 import { DOC_TYPES } from '../../shared/lib/documents';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
@@ -208,6 +215,30 @@ export const driversService = {
       is_online: isOnline,
       message: isOnline ? 'Driver is now online' : 'Driver is now offline',
     };
+  },
+
+  async heartbeat(user: AuthUser) {
+    const [driver] = await db
+      .select({ id: drivers.id })
+      .from(drivers)
+      .where(eq(drivers.user_id, user.id))
+      .limit(1);
+
+    if (!driver) throw new NotFoundError('Onboarding not started');
+
+    const now = new Date();
+
+    await db.update(drivers).set({ last_heartbeat: now }).where(eq(drivers.id, driver.id));
+
+    await db
+      .insert(driverLocations)
+      .values({ driver_id: driver.id, lat: 0, lng: 0, updated_at: now })
+      .onConflictDoUpdate({
+        target: driverLocations.driver_id,
+        set: { updated_at: now },
+      });
+
+    return { ok: true };
   },
 
   async updateProfile(

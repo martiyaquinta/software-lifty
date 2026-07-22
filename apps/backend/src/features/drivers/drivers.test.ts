@@ -248,6 +248,48 @@ describe('Driver Profile', () => {
     expect(data.error.message).toContain('Onboarding');
   });
 
+  test('PUT /me/heartbeat updates last_heartbeat and driver_locations.updated_at', async () => {
+    const { token, driverId, userId } = await fullOnboarding(phone, password);
+    const db = getDb();
+
+    await db
+      .update(drivers)
+      .set({ status: 'approved', is_online: true })
+      .where(eq(drivers.id, driverId));
+
+    const beforeDriver = await db
+      .select({ last_heartbeat: drivers.last_heartbeat })
+      .from(drivers)
+      .where(eq(drivers.id, driverId))
+      .limit(1);
+    expect(beforeDriver[0]?.last_heartbeat).toBeNull();
+
+    const { status } = await request('PUT', '/api/drivers/me/heartbeat', undefined, token);
+
+    expect(status).toBe(200);
+
+    const [afterDriver] = await db
+      .select({ last_heartbeat: drivers.last_heartbeat })
+      .from(drivers)
+      .where(eq(drivers.id, driverId))
+      .limit(1);
+    expect(afterDriver.last_heartbeat).not.toBeNull();
+    expect(afterDriver.last_heartbeat!.getTime()).toBeGreaterThan(Date.now() - 5000);
+  });
+
+  test('PUT /me/heartbeat without auth returns 401', async () => {
+    const { status, data } = await request('PUT', '/api/drivers/me/heartbeat');
+    expect(status).toBe(401);
+    expect(data.error).toBe('Unauthorized');
+  });
+
+  test('PUT /me/heartbeat without driver row returns error', async () => {
+    const { token } = await registerAndGetToken(phone, password);
+    const { status, data } = await request('PUT', '/api/drivers/me/heartbeat', undefined, token);
+    expect(status).toBe(404);
+    expect(data.error.message).toContain('Onboarding');
+  });
+
   test('GET /me includes vehicle data', async () => {
     const { token } = await fullOnboarding(phone, password);
 
