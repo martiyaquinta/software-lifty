@@ -140,3 +140,61 @@ describe('cleanupStaleDrivers', () => {
     expect(updated.is_online).toBe(true);
   });
 });
+
+describe('cleanup stale driver locations', () => {
+  test('deletes locations older than 24 hours', async () => {
+    const [user] = await db
+      .insert(users)
+      .values({ phone: '+5492611112000', role: 'driver', full_name: 'Test' })
+      .returning({ id: users.id });
+    const [driver] = await db
+      .insert(drivers)
+      .values({ user_id: user.id, is_online: false })
+      .returning({ id: drivers.id });
+
+    await db.insert(driverLocations).values({
+      driver_id: driver.id,
+      lat: -32.89,
+      lng: -68.84,
+      updated_at: new Date(Date.now() - 25 * 60 * 60 * 1000),
+    });
+
+    const result = await cleanupStaleDrivers();
+    expect(result.cleanedLocations).toBe(1);
+
+    const [loc] = await db
+      .select({ driver_id: driverLocations.driver_id })
+      .from(driverLocations)
+      .where(eq(driverLocations.driver_id, driver.id))
+      .limit(1);
+    expect(loc).toBeUndefined();
+  });
+
+  test('keeps recent locations', async () => {
+    const [user] = await db
+      .insert(users)
+      .values({ phone: '+5492611112001', role: 'driver', full_name: 'Test' })
+      .returning({ id: users.id });
+    const [driver] = await db
+      .insert(drivers)
+      .values({ user_id: user.id, is_online: false })
+      .returning({ id: drivers.id });
+
+    await db.insert(driverLocations).values({
+      driver_id: driver.id,
+      lat: -32.89,
+      lng: -68.84,
+      updated_at: new Date(),
+    });
+
+    const result = await cleanupStaleDrivers();
+    expect(result.cleanedLocations).toBe(0);
+
+    const [loc] = await db
+      .select({ driver_id: driverLocations.driver_id })
+      .from(driverLocations)
+      .where(eq(driverLocations.driver_id, driver.id))
+      .limit(1);
+    expect(loc).toBeDefined();
+  });
+});
