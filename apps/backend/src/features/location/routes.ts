@@ -6,16 +6,9 @@ import { safeCall } from '../../shared/lib/route-utils';
 import { getSupabaseClient } from '../../shared/lib/supabase';
 import { authGuard } from '../../shared/middleware/require-auth';
 import { locationUpdateBody } from './schema';
-import { getDriverIdByUserId, upsertLocation } from './service';
+import { getDriverIdByUserId, markDriverOffline, upsertLocation } from './service';
 
 async function resolveUserIdFromToken(token: string): Promise<string | null> {
-  const supabase = getSupabaseClient();
-  if (supabase) {
-    const { data, error } = await supabase.auth.getUser(token);
-    if (error || !data.user) return null;
-    return data.user.id;
-  }
-
   if (process.env.NODE_ENV === 'test') {
     try {
       const [row] = await db
@@ -29,13 +22,18 @@ async function resolveUserIdFromToken(token: string): Promise<string | null> {
     }
   }
 
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) return null;
+    return data.user.id;
+  }
+
   return null;
 }
 
 export const locationWsPlugin = new Elysia().ws('/ws/location', {
   async open(ws) {
-    // Store a promise that resolves with the driverId once auth completes.
-    // The message handler awaits this promise so it never races open().
     let resolveReady: (driverId: string | null) => void;
     (ws.data as any).ready = new Promise<string | null>((resolve) => {
       resolveReady = resolve;
@@ -79,7 +77,6 @@ export const locationWsPlugin = new Elysia().ws('/ws/location', {
 
     if (typeof data.lat !== 'number' || typeof data.lng !== 'number') return;
 
-    // Use the cached driverId, or wait for the open handler to finish.
     let driverId = (ws.data as any).driverId as string | undefined;
     if (!driverId) {
       const ready = (ws.data as any).ready as Promise<string | null> | undefined;
@@ -89,8 +86,11 @@ export const locationWsPlugin = new Elysia().ws('/ws/location', {
 
     await upsertLocation(driverId, data.lat, data.lng, data.heading);
   },
-  close(_ws) {
-    // no cleanup needed for MVP
+  async close(ws) {
+    const driverId = (ws.data as any).driverId as string | undefined;
+    if (driverId) {
+      await markDriverOffline(driverId);
+    }
   },
 });
 
