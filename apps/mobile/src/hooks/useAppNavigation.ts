@@ -9,6 +9,7 @@ const SCREEN_TO_ROUTE = {
   LoginCredentials: '/login-credentials',
   ForgotPassword: '/forgot-password',
   Terms: '/terms',
+  TripHistory: '/trip-history',
   OnboardingStep1: '/onboarding-step1',
   OnboardingStep2: '/onboarding-step2',
   OnboardingVehicle: '/onboarding-vehicle',

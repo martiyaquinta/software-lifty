@@ -112,6 +112,11 @@ export const OnlineScreen: React.FC = () => {
         onPress: () => navigation.navigate('Profile'),
       },
       {
+        label: 'Historial de viajes',
+        icon: '📋',
+        onPress: () => navigation.navigate('TripHistory'),
+      },
+      {
         label: 'Cerrar sesion',
         icon: '🚪',
         onPress: () => signOut.mutateAsync(),
