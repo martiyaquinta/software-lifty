@@ -1,5 +1,6 @@
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
+delete process.env.REDIS_URL;
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
@@ -9,6 +10,7 @@ import { drivers, tripEvents, trips, users } from '../../shared/db/schema';
 import { createTestAuthPlugin, createTestToken } from '../../shared/testing/utils';
 
 let app: any;
+let testId = 0;
 
 async function truncateTables() {
   const db = getDb();
@@ -19,7 +21,10 @@ async function truncateTables() {
 }
 
 async function request(method: string, path: string, body?: object, token?: string) {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-forwarded-for': `10.0.0.${(testId % 254) + 1}`,
+  };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   const req = new Request(`http://localhost${path}`, {
     method,
@@ -52,6 +57,7 @@ beforeAll(() => {
 });
 
 beforeEach(async () => {
+  testId++;
   await truncateTables();
 });
 
@@ -534,5 +540,135 @@ describe('Trip State Machine', () => {
     expect(status).toBe(400);
     expect(data.error.code).toBe('BAD_REQUEST');
     expect(data.error.message).toContain('already collected');
+  });
+
+  test('17. accept endpoint enforces rate limit (5 req/min)', async () => {
+    const ip = '203.0.113.100';
+    const token = await registerAndGetToken(phone, password);
+    await createDriverRow(token);
+
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      'x-forwarded-for': ip,
+    };
+
+    const apiRequest = async (method: string, path: string, body?: object) => {
+      const req = new Request(`http://localhost${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      return app.handle(req);
+    };
+
+    const tripRes = await apiRequest('POST', '/api/trips', {
+      origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02,
+      vehicle_type: 'car', distance_km: 5, duration_minutes: 15,
+    });
+    const { id: tripId } = await tripRes.json();
+
+    const callAccept = async () => {
+      const res = await apiRequest('POST', `/api/trips/${tripId}/accept`);
+      return res.status;
+    };
+
+    expect(await callAccept()).toBe(200);
+
+    for (let i = 0; i < 4; i++) {
+      expect(await callAccept()).toBe(400);
+    }
+
+    expect(await callAccept()).toBe(429);
+  });
+
+  test('18. cancel endpoint enforces rate limit (5 req/min)', async () => {
+    const ip = '203.0.113.101';
+    const token = await registerAndGetToken(phone, password);
+    await createDriverRow(token);
+
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      'x-forwarded-for': ip,
+    };
+
+    const apiRequest = async (method: string, path: string, body?: object) => {
+      const req = new Request(`http://localhost${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      return app.handle(req);
+    };
+
+    const tripRes = await apiRequest('POST', '/api/trips', {
+      origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02,
+      vehicle_type: 'car', distance_km: 5, duration_minutes: 15,
+    });
+    const { id: tripId } = await tripRes.json();
+
+    const acceptRes = await apiRequest('POST', `/api/trips/${tripId}/accept`);
+    expect(acceptRes.status).toBe(200);
+
+    const callCancel = async () => {
+      const res = await apiRequest('POST', `/api/trips/${tripId}/cancel`);
+      return res.status;
+    };
+
+    expect(await callCancel()).toBe(200);
+
+    for (let i = 0; i < 4; i++) {
+      expect(await callCancel()).toBe(400);
+    }
+
+    expect(await callCancel()).toBe(429);
+  });
+
+  test('19. complete endpoint enforces rate limit (3 req/min)', async () => {
+    const ip = '203.0.113.102';
+    const token = await registerAndGetToken(phone, password);
+    await createDriverRow(token);
+
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      'x-forwarded-for': ip,
+    };
+
+    const apiRequest = async (method: string, path: string, body?: object) => {
+      const req = new Request(`http://localhost${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      return app.handle(req);
+    };
+
+    const tripRes = await apiRequest('POST', '/api/trips', {
+      origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02,
+      vehicle_type: 'car', distance_km: 5, duration_minutes: 15,
+    });
+    const { id: tripId } = await tripRes.json();
+
+    const acceptRes = await apiRequest('POST', `/api/trips/${tripId}/accept`);
+    expect(acceptRes.status).toBe(200);
+    const enRouteRes = await apiRequest('POST', `/api/trips/${tripId}/en-route`);
+    expect(enRouteRes.status).toBe(200);
+    const arrivedRes = await apiRequest('POST', `/api/trips/${tripId}/arrived`);
+    expect(arrivedRes.status).toBe(200);
+    const startRes = await apiRequest('POST', `/api/trips/${tripId}/start`);
+    expect(startRes.status).toBe(200);
+
+    const callComplete = async () => {
+      const res = await apiRequest('POST', `/api/trips/${tripId}/complete`);
+      return res.status;
+    };
+
+    expect(await callComplete()).toBe(200);
+    expect(await callComplete()).toBe(400);
+    expect(await callComplete()).toBe(400);
+
+    expect(await callComplete()).toBe(429);
   });
 });
