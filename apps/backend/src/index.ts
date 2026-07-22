@@ -15,6 +15,7 @@ import { ratingsRoutes } from './features/ratings/routes';
 import { sosRoutes } from './features/sos/routes';
 import { tripRoutes } from './features/trips/routes';
 import { getDb, getPool, resetDb } from './shared/db/client';
+import { startStaleDriverCleanup, stopStaleDriverCleanup } from './shared/lib/cleanup';
 import { runReadyChecks } from './shared/lib/health';
 import { logger } from './shared/lib/logger';
 import { dbPoolAvailable, dbPoolSize, registry } from './shared/lib/metrics';
@@ -221,8 +222,11 @@ if (process.env.NODE_ENV !== 'test') {
   const app = createApp().listen(process.env.PORT || 3000);
   logger.info('Server running on port', String(app.server?.port));
 
+  startStaleDriverCleanup();
+
   process.on('SIGINT', async () => {
     logger.info('Shutting down...');
+    stopStaleDriverCleanup();
     await app.stop();
     resetDb();
     await closeRedis();
@@ -231,6 +235,7 @@ if (process.env.NODE_ENV !== 'test') {
 
   process.on('SIGTERM', async () => {
     logger.info('Shutting down...');
+    stopStaleDriverCleanup();
     await app.stop();
     resetDb();
     await closeRedis();
