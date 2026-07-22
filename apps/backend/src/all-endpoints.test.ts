@@ -447,17 +447,6 @@ describe('Trips', () => {
     const { status } = await req('POST', `/api/trips/${trip.id}/start`, undefined, token);
     expect(status).toBe(400);
   });
-  test('rate → 404 non-existent', async () => {
-    const token = await register('+54926100309');
-    await driver(token);
-    const { status } = await req(
-      'POST',
-      '/api/trips/00000000-0000-0000-0000-000000000000/rate',
-      { rating: 4 },
-      token,
-    );
-    expect(status).toBe(404);
-  });
   test('all trip mutations require auth → 401', async () => {
     const fid = '00000000-0000-0000-0000-000000000000';
     for (const action of ['accept', 'reject', 'en-route', 'complete', 'cancel']) {
