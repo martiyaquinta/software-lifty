@@ -10,7 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { eq } from 'drizzle-orm';
 import { createApp } from './index';
 import { getDb, resetDb } from './shared/db/client';
-import { drivers, users } from './shared/db/schema';
+import { districts, drivers, users } from './shared/db/schema';
 import { getRedis } from './shared/lib/redis';
 import { createTestToken } from './shared/testing/utils';
 
@@ -772,8 +772,18 @@ describe('Drivers', () => {
     expect(status).toBe(401);
   });
   test('me/online → 200', async () => {
-    const token = await register('+54926101103');
+    const { token, userId } = await registerWithUser('+54926101103');
     await driver(token);
+    const db = getDb();
+    const [district] = await db
+      .select({ id: districts.id })
+      .from(districts)
+      .orderBy(districts.name)
+      .limit(1);
+    await db
+      .update(drivers)
+      .set({ status: 'approved', district_id: district.id })
+      .where(eq(drivers.user_id, userId));
     const { status, data } = await req('PUT', '/api/drivers/me/online', { is_online: true }, token);
     expect(status).toBe(200);
     expect(data.is_online).toBe(true);
