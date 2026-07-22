@@ -35,6 +35,7 @@ export const WaitingPassengerScreen: React.FC = () => {
   const activeTripId = useTripStore((s) => s.activeTripId);
   const setTripStatus = useTripStore((s) => s.setTripStatus);
   const clearTrip = useTripStore((s) => s.clearTrip);
+  const trip = useTripStore((s) => s.trip);
   const driverId = useAuthStore((s) => s.driverId);
 
   useEffect(() => {
@@ -149,7 +150,7 @@ export const WaitingPassengerScreen: React.FC = () => {
       <Text style={styles.totalWait}>5:00</Text>
 
       <Text style={styles.waitingFor}>Esperando al pasajero</Text>
-      <Text style={styles.address}>en Av. San Martin 450</Text>
+      <Text style={styles.address}>en {trip?.origin_address ?? 'Origen'}</Text>
 
       <View style={styles.chatArea}>
         <LiftyWatermark />
