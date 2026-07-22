@@ -229,6 +229,35 @@ describe('Location WebSocket', () => {
     { timeout: 15000 },
   );
 
+  test(
+    'WS close sets driver offline',
+    async () => {
+      const { token, driverId } = await registerAndCreateDriver(phone, password);
+
+      await getDb()
+        .update(drivers)
+        .set({ is_online: true })
+        .where(eq(drivers.id, driverId));
+
+      const { ws, open } = await wsConnect(port, token);
+      expect(open).toBe(true);
+
+      await wsSendAndWait({ lat: -32.89, lng: -68.84 }, ws, driverId);
+
+      ws.close();
+      await new Promise((r) => setTimeout(r, 500));
+
+      const [driver] = await getDb()
+        .select({ is_online: drivers.is_online })
+        .from(drivers)
+        .where(eq(drivers.id, driverId))
+        .limit(1);
+
+      expect(driver!.is_online).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
   test('WS without driver row closes connection', async () => {
     const db = getDb();
     const [user] = await db
