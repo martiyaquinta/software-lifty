@@ -9,6 +9,7 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import { districts } from './districts';
 import { users } from './users';
 
 export const drivers = pgTable('drivers', {
@@ -28,6 +29,7 @@ export const drivers = pgTable('drivers', {
   admin_reviewed_by: uuid('admin_reviewed_by').references(() => users.id),
   admin_reviewed_at: timestamp('admin_reviewed_at'),
   admin_review_notes: text('admin_review_notes'),
+  district_id: uuid('district_id').references(() => districts.id, { onDelete: 'set null' }),
   approval_token: text('approval_token').unique(),
   approved_at: timestamp('approved_at'),
   platform_debt: doublePrecision('platform_debt').default(0).notNull(),

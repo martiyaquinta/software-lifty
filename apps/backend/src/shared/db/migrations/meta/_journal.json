@@ -176,6 +176,13 @@
       "when": 1783570000000,
       "tag": "0023_driver_approval_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1784678400000,
+      "tag": "0024_district_terms_and_driver_district",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 import { and, eq, ne } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
-import { driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
+import { districts, driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
 import { DOC_TYPES } from '../../shared/lib/documents';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
@@ -95,10 +95,13 @@ export const driversService = {
       };
     }
     if (driver.status === 'approved') {
+      const district = await this.getMyDistrict(user);
       return {
         status: 'approved',
         step: 'approved',
         documents_pending_review: documentsPendingReview,
+        has_district: !!district,
+        district: district ?? undefined,
       };
     }
     if (driver.status === 'rejected' || driver.admin_review_status === 'rejected') {
@@ -164,6 +167,7 @@ export const driversService = {
         id: drivers.id,
         is_online: drivers.is_online,
         documents_pending_review: drivers.documents_pending_review,
+        district_id: drivers.district_id,
       })
       .from(drivers)
       .where(eq(drivers.user_id, user.id))
@@ -176,6 +180,14 @@ export const driversService = {
         'No podes conectarte: tenes documentos pendientes de revision.',
         409,
         'DOCUMENTS_UNDER_REVIEW',
+      );
+    }
+
+    if (isOnline && !driver.district_id) {
+      throw new AppError(
+        'Debes seleccionar un municipio antes de conectarte.',
+        400,
+        'DISTRICT_REQUIRED',
       );
     }
 
@@ -507,6 +519,78 @@ export const driversService = {
       status: doc.status,
       requires_review: isSensitive,
     };
+  },
+
+  async setDistrict(user: AuthUser, districtId: string) {
+    return await db.transaction(async (tx) => {
+      const [driver] = await tx
+        .select({
+          id: drivers.id,
+          status: drivers.status,
+          district_id: drivers.district_id,
+        })
+        .from(drivers)
+        .where(eq(drivers.user_id, user.id))
+        .limit(1);
+
+      if (!driver) throw new NotFoundError('Driver profile not found');
+      if (driver.status !== 'approved') {
+        throw new AppError('Debes estar aprobado para elegir un municipio', 400, 'NOT_APPROVED');
+      }
+      if (driver.district_id) {
+        throw new AppError(
+          'Ya tenes un municipio asignado y no se puede cambiar',
+          409,
+          'DISTRICT_ALREADY_SET',
+        );
+      }
+
+      const [district] = await tx
+        .select({
+          id: districts.id,
+          name: districts.name,
+          province: districts.province,
+          terms_and_conditions: districts.terms_and_conditions,
+        })
+        .from(districts)
+        .where(and(eq(districts.id, districtId), eq(districts.status, 'active')))
+        .limit(1);
+
+      if (!district || !district.terms_and_conditions) {
+        throw new AppError('Municipio no encontrado o no disponible', 404, 'DISTRICT_NOT_FOUND');
+      }
+
+      await tx
+        .update(drivers)
+        .set({ district_id: districtId, updated_at: new Date() })
+        .where(eq(drivers.id, driver.id));
+
+      return {
+        district_id: district.id,
+        district_name: district.name,
+        district_province: district.province,
+      };
+    });
+  },
+
+  async getMyDistrict(
+    user: AuthUser,
+  ): Promise<{ id: string; name: string; province: string } | null> {
+    const [driver] = await db
+      .select({ district_id: drivers.district_id })
+      .from(drivers)
+      .where(eq(drivers.user_id, user.id))
+      .limit(1);
+
+    if (!driver?.district_id) return null;
+
+    const [district] = await db
+      .select({ id: districts.id, name: districts.name, province: districts.province })
+      .from(districts)
+      .where(eq(districts.id, driver.district_id))
+      .limit(1);
+
+    return district ?? null;
   },
 
   async getMyProfile(user: AuthUser) {
