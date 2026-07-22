@@ -282,7 +282,7 @@ describe('Trip State Machine', () => {
 
   test('8. cancel from waiting >= 5min → cancelled_late', async () => {
     const token = await registerAndGetToken(phone, password);
-    await createDriverRow(token);
+    const driverId = await createDriverRow(token);
 
     const { data: trip } = await request(
       'POST',
@@ -314,6 +314,13 @@ describe('Trip State Machine', () => {
 
     expect(status).toBe(200);
     expect(data.status).toBe('cancelled_late');
+    expect(data.total_fare).toBeGreaterThan(0);
+    expect(data.platform_fee).toBeGreaterThan(0);
+    expect(data.driver_earnings).toBeGreaterThan(0);
+    expect(data.driver_earnings).toBeLessThan(data.total_fare);
+
+    const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId));
+    expect(driver.platform_debt).toBeGreaterThan(0);
   });
 
   test('9. GET /active returns active trip', async () => {

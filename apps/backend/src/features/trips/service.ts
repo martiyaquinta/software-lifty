@@ -4,7 +4,7 @@ import { getDriverId } from '../../shared/db/queries';
 import { drivers, tripEvents, trips } from '../../shared/db/schema';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
-import { calculateFare } from '../../shared/lib/pricing';
+import { calculateFare, calculatePlatformFee } from '../../shared/lib/pricing';
 import { sendPushToUser } from '../../shared/lib/push';
 import type { AuthUser } from '../../shared/middleware/auth';
 import { ratingsService } from '../ratings/service';
@@ -109,6 +109,24 @@ async function transitionTrip(driverId: string, tripId: string, targetStatus: st
 
     if (actualTarget === 'waiting') {
       updateData.waiting_since = new Date();
+    }
+
+    if (actualTarget === 'cancelled_late') {
+      const compensationTotal = trip.base_fare ?? 0;
+      const compensationPlatformFee = calculatePlatformFee(compensationTotal);
+      const compensationDriverEarnings = compensationTotal - compensationPlatformFee;
+
+      updateData.total_fare = compensationTotal;
+      updateData.platform_fee = compensationPlatformFee;
+      updateData.driver_earnings = compensationDriverEarnings;
+
+      await tx
+        .update(drivers)
+        .set({
+          platform_debt: sql`${drivers.platform_debt} + ${compensationPlatformFee}`,
+          updated_at: new Date(),
+        })
+        .where(eq(drivers.id, trip.driver_id));
     }
 
     await tx.update(trips).set(updateData).where(eq(trips.id, tripId));
