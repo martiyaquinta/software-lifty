@@ -110,6 +110,7 @@ async function wsSendAndWait(message: object, ws: WebSocket, driverId: string): 
 }
 
 import { eq } from 'drizzle-orm';
+import { findNearbyOnlineDrivers } from './service';
 
 beforeAll(() => {
   app = createApp();
@@ -268,5 +269,60 @@ describe('Location WebSocket', () => {
 
     const { code } = await wsExpectClose(port, token);
     expect([4001, 1006]).toContain(code);
+  });
+});
+
+describe('findNearbyOnlineDrivers', () => {
+  let phoneCounter = 0;
+
+  async function seedDriver(params: { is_online?: boolean; lat: number; lng: number; heading?: number }) {
+    const db = getDb();
+    const phone = `+5492611234${String(500 + phoneCounter++).padStart(3, '0')}`;
+    const [user] = await db
+      .insert(users)
+      .values({ phone, full_name: 'Test Driver', role: 'driver' })
+      .returning({ id: users.id });
+    const [driver] = await db
+      .insert(drivers)
+      .values({ user_id: user.id, is_online: params.is_online ?? true, status: 'approved' })
+      .returning({ id: drivers.id });
+    await db.insert(driverLocations).values({
+      driver_id: driver.id,
+      lat: params.lat,
+      lng: params.lng,
+      heading: params.heading ?? null,
+    });
+    return { driverId: driver.id };
+  }
+
+  test('returns online drivers within radius', async () => {
+    await seedDriver({ lat: -32.89, lng: -68.84 });
+
+    const nearby = await findNearbyOnlineDrivers(-32.89, -68.84, 5);
+    expect(nearby.length).toBe(1);
+    expect(nearby[0].lat).toBeCloseTo(-32.89, 1);
+    expect(nearby[0].lng).toBeCloseTo(-68.84, 1);
+  });
+
+  test('excludes offline drivers', async () => {
+    await seedDriver({ is_online: false, lat: -32.89, lng: -68.84 });
+
+    const nearby = await findNearbyOnlineDrivers(-32.89, -68.84, 5);
+    expect(nearby.length).toBe(0);
+  });
+
+  test('returns empty for drivers outside radius', async () => {
+    await seedDriver({ lat: -32.89, lng: -68.84 });
+
+    const nearby = await findNearbyOnlineDrivers(-34.6, -58.38, 5);
+    expect(nearby.length).toBe(0);
+  });
+
+  test('returns multiple drivers within radius', async () => {
+    await seedDriver({ lat: -32.89, lng: -68.84 });
+    await seedDriver({ lat: -32.88, lng: -68.83 });
+
+    const nearby = await findNearbyOnlineDrivers(-32.89, -68.84, 5);
+    expect(nearby.length).toBe(2);
   });
 });

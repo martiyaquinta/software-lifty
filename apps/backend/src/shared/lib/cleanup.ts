@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNotNull, lt, ne, notInArray, sql } from 'drizzle-orm';
 import { db } from '../db/client';
-import { drivers, trips } from '../db/schema';
+import { driverLocations, drivers, trips } from '../db/schema';
 import { logger } from './logger';
 
 const ADVISORY_LOCK_KEY = 42;
@@ -13,15 +13,20 @@ const ACTIVE_TRIP_STATUSES = [
   'in_progress',
 ] as const;
 
-export async function cleanupStaleDrivers(): Promise<{ markedOffline: number }> {
+const LOCATION_STALE_HOURS = 24;
+
+export async function cleanupStaleDrivers(): Promise<{
+  markedOffline: number;
+  cleanedLocations: number;
+}> {
   try {
-    const lockAcquired = await db.execute<{ locked: boolean }>(
+    const lockResult = await db.execute(
       sql.raw(`SELECT pg_try_advisory_lock(${ADVISORY_LOCK_KEY}) AS locked`),
     );
-    const rows = lockAcquired as unknown as { locked: boolean }[];
+    const rows = lockResult.rows as { locked: boolean }[];
 
-    if (!rows?.[0]?.locked) {
-      return { markedOffline: 0 };
+    if (!rows[0]?.locked) {
+      return { markedOffline: 0, cleanedLocations: 0 };
     }
 
     try {
@@ -54,7 +59,17 @@ export async function cleanupStaleDrivers(): Promise<{ markedOffline: number }> 
         logger.info(`[CLEANUP] Marked ${markedOffline} stale drivers offline`);
       }
 
-      return { markedOffline };
+      const locationCutoff = new Date(Date.now() - LOCATION_STALE_HOURS * 60 * 60 * 1000);
+      const deletedResult = await db
+        .delete(driverLocations)
+        .where(lt(driverLocations.updated_at, locationCutoff));
+      const cleanedLocations = (deletedResult as unknown as { rowCount?: number }).rowCount ?? 0;
+
+      if (cleanedLocations > 0) {
+        logger.info(`[CLEANUP] Cleaned ${cleanedLocations} stale driver locations`);
+      }
+
+      return { markedOffline, cleanedLocations };
     } finally {
       await db.execute(sql.raw(`SELECT pg_advisory_unlock(${ADVISORY_LOCK_KEY})`));
     }
@@ -62,7 +77,7 @@ export async function cleanupStaleDrivers(): Promise<{ markedOffline: number }> 
     logger.error('[CLEANUP] Failed to run stale driver cleanup', {
       error: (err as Error).message,
     });
-    return { markedOffline: 0 };
+    return { markedOffline: 0, cleanedLocations: 0 };
   }
 }
 

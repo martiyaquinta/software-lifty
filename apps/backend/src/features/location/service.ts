@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
 import { driverLocations, drivers } from '../../shared/db/schema';
 
@@ -38,4 +38,25 @@ export async function upsertLocation(driverId: string, lat: number, lng: number,
         updated_at: new Date(),
       },
     });
+}
+
+export async function findNearbyOnlineDrivers(lat: number, lng: number, radiusKm: number) {
+  const haversine = sql`(
+    6371 * acos(
+      cos(radians(${lat})) * cos(radians(${driverLocations.lat})) *
+      cos(radians(${driverLocations.lng}) - radians(${lng})) +
+      sin(radians(${lat})) * sin(radians(${driverLocations.lat}))
+    )
+  )`;
+
+  return db
+    .select({
+      driver_id: driverLocations.driver_id,
+      lat: driverLocations.lat,
+      lng: driverLocations.lng,
+      heading: driverLocations.heading,
+    })
+    .from(driverLocations)
+    .innerJoin(drivers, eq(drivers.id, driverLocations.driver_id))
+    .where(and(eq(drivers.is_online, true), sql`${haversine} <= ${radiusKm}`));
 }
