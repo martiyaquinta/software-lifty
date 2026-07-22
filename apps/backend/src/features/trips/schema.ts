@@ -17,12 +17,6 @@ export const createTripBody = t.Object({
   passenger_id: t.Optional(t.String()),
 });
 
-export const rateTripBody = t.Object({
-  rating: t.Integer({ minimum: 1, maximum: 5 }),
-  comment: t.Optional(t.String()),
-  tags: t.Optional(t.String()),
-});
-
 export const collectBody = t.Object({
   payment_method: t.Union([t.Literal('cash'), t.Literal('mercadopago')]),
 });
