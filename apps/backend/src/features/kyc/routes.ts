@@ -61,6 +61,18 @@ export const kycRoutes = new Elysia({ prefix: '/kyc' })
       return { error: 'Bad Request', message: 'Invalid JSON body' };
     }
 
+    const timestampStr = request.headers.get('X-Timestamp');
+    if (!timestampStr) {
+      set.status = 401;
+      return { error: 'Unauthorized', message: 'Missing X-Timestamp header' };
+    }
+    const timestamp = Number.parseInt(timestampStr, 10);
+    const now = Math.floor(Date.now() / 1000);
+    if (Number.isNaN(timestamp) || Math.abs(now - timestamp) > 300) {
+      set.status = 401;
+      return { error: 'Unauthorized', message: 'Timestamp expired' };
+    }
+
     if (!verifyHmac(text, signature)) {
       set.status = 401;
       return { error: 'Unauthorized', message: 'Invalid HMAC signature' };

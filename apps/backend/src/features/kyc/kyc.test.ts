@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
 import { driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
-import { createTestToken } from '../../shared/testing/utils';
+import { createTestAuthPlugin, createTestToken } from '../../shared/testing/utils';
 
 let app: any;
 
@@ -38,6 +38,10 @@ async function request(
   return { status: res.status, data };
 }
 
+function webhookHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return { 'X-Timestamp': String(Math.floor(Date.now() / 1000)), ...extra };
+}
+
 async function registerAndGetTokenAndUser(phone: string, _password: string): Promise<{ token: string; userId: string }> {
   const db = getDb();
   const [user] = await db
@@ -59,7 +63,7 @@ async function createDriver(token: string): Promise<string> {
 }
 
 beforeAll(() => {
-  app = createApp();
+  app = createApp(createTestAuthPlugin());
 });
 
 beforeEach(async () => {
@@ -124,7 +128,7 @@ describe('KYC', () => {
       '/api/kyc/webhook/didit',
       { vendor_data: userId, status: 'in_progress' },
       undefined,
-      { 'X-Didit-Signature': 'valid' },
+      webhookHeaders({ 'X-Didit-Signature': 'valid' }),
     );
 
     expect(status).toBe(200);
@@ -147,7 +151,7 @@ describe('KYC', () => {
       '/api/kyc/webhook/didit',
       { vendor_data: userId, status: 'in_progress' },
       undefined,
-      { 'X-Didit-Signature': 'valid' },
+      webhookHeaders({ 'X-Didit-Signature': 'valid' }),
     );
 
     await request(
@@ -155,7 +159,7 @@ describe('KYC', () => {
       '/api/kyc/webhook/didit',
       { vendor_data: userId, status: 'under_review' },
       undefined,
-      { 'X-Didit-Signature': 'valid' },
+      webhookHeaders({ 'X-Didit-Signature': 'valid' }),
     );
 
     const { status } = await request(
@@ -168,7 +172,7 @@ describe('KYC', () => {
         document_number: '35678901',
       },
       undefined,
-      { 'X-Didit-Signature': 'valid' },
+      webhookHeaders({ 'X-Didit-Signature': 'valid' }),
     );
 
     expect(status).toBe(200);
@@ -196,7 +200,7 @@ describe('KYC', () => {
       '/api/kyc/webhook/didit',
       { vendor_data: userId, status: 'in_progress' },
       undefined,
-      { 'X-Didit-Signature': 'invalid' },
+      webhookHeaders({ 'X-Didit-Signature': 'invalid' }),
     );
 
     expect(status).toBe(401);
@@ -213,7 +217,7 @@ describe('KYC', () => {
       '/api/kyc/webhook/didit',
       { vendor_data: userId, status: 'bogus' },
       undefined,
-      { 'X-Didit-Signature': 'valid' },
+      webhookHeaders({ 'X-Didit-Signature': 'valid' }),
     );
 
     expect(status).toBe(400);
@@ -233,11 +237,218 @@ describe('KYC', () => {
       '/api/kyc/webhook/didit',
       { vendor_data: userId, status: 'pending' },
       undefined,
-      { 'X-Didit-Signature': 'valid' },
+      webhookHeaders({ 'X-Didit-Signature': 'valid' }),
     );
 
     expect(status).toBe(400);
     expect(data.error.code).toBe('BAD_REQUEST');
     expect(data.error.message).toBe('Invalid status transition from approved to pending');
+  });
+
+  test('POST /webhook without signature header returns 401', async () => {
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await createDriver(token);
+
+    const { status, data } = await request(
+      'POST',
+      '/api/kyc/webhook/didit',
+      { vendor_data: userId, status: 'in_progress' },
+    );
+
+    expect(status).toBe(401);
+    expect(data.error).toBe('Unauthorized');
+    expect(data.message).toBe('Missing X-Timestamp header');
+  });
+
+  test('POST /webhook with empty signature header returns 401', async () => {
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await createDriver(token);
+
+    const { status, data } = await request(
+      'POST',
+      '/api/kyc/webhook/didit',
+      { vendor_data: userId, status: 'in_progress' },
+      undefined,
+      webhookHeaders({ 'X-Didit-Signature': '' }),
+    );
+
+    expect(status).toBe(401);
+    expect(data.error).toBe('Unauthorized');
+    expect(data.message).toBe('Invalid HMAC signature');
+  });
+
+  test('POST /webhook with malformed JSON body returns 400', async () => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Didit-Signature': 'valid',
+    };
+    const req = new Request('http://localhost/api/kyc/webhook/didit', {
+      method: 'POST',
+      headers,
+      body: 'not-json{{{',
+    });
+    const res = await app.handle(req);
+    const data = await res.json();
+    expect(res.status).toBe(400);
+    expect(data.error).toBe('Bad Request');
+    expect(data.message).toBe('Invalid JSON body');
+  });
+
+  test('POST /webhook with missing vendor_data returns 400', async () => {
+    const { token } = await registerAndGetTokenAndUser(phone, password);
+    await createDriver(token);
+
+    const { status, data } = await request(
+      'POST',
+      '/api/kyc/webhook/didit',
+      { status: 'in_progress' },
+      undefined,
+      webhookHeaders({ 'X-Didit-Signature': 'valid' }),
+    );
+
+    expect(status).toBe(400);
+    expect(data.error).toBe('Bad Request');
+    expect(data.message).toBe('userId and status are required');
+  });
+
+  test('POST /webhook with non-existent user returns 404', async () => {
+    const { status, data } = await request(
+      'POST',
+      '/api/kyc/webhook/didit',
+      { vendor_data: '00000000-0000-0000-0000-000000000000', status: 'approved' },
+      undefined,
+      webhookHeaders({ 'X-Didit-Signature': 'valid' }),
+    );
+
+    expect(status).toBe(404);
+    expect(data.error.code).toBe('NOT_FOUND');
+    expect(data.error.message).toBe('User not found');
+  });
+
+  test('POST /webhook with rejected status updates user and driver', async () => {
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await createDriver(token);
+
+    const { status } = await request(
+      'POST',
+      '/api/kyc/webhook/didit',
+      { vendor_data: userId, status: 'rejected' },
+      undefined,
+      webhookHeaders({ 'X-Didit-Signature': 'valid' }),
+    );
+
+    expect(status).toBe(200);
+
+    const db = getDb();
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    expect(user!.kyc_status).toBe('rejected');
+
+    const [driver] = await db.select().from(drivers).where(eq(drivers.user_id, userId)).limit(1);
+    expect(driver!.kyc_status).toBe('rejected');
+  });
+
+  test('POST /webhook maps DIDIT Declined label to rejected', async () => {
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await createDriver(token);
+
+    const { status } = await request(
+      'POST',
+      '/api/kyc/webhook/didit',
+      { vendor_data: userId, status: 'Declined' },
+      undefined,
+      webhookHeaders({ 'X-Didit-Signature': 'valid' }),
+    );
+
+    expect(status).toBe(200);
+
+    const db = getDb();
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    expect(user!.kyc_status).toBe('rejected');
+  });
+
+  test('POST /webhook with X-Signature header variant accepts valid signature', async () => {
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await createDriver(token);
+
+    const { status, data } = await request(
+      'POST',
+      '/api/kyc/webhook/didit',
+      { vendor_data: userId, status: 'in_progress' },
+      undefined,
+      webhookHeaders({ 'X-Signature': 'valid' }),
+    );
+
+    expect(status).toBe(200);
+    expect(data.message).toBe('Webhook processed');
+  });
+
+  test('POST /webhook with X-Signature-V2 header variant accepts valid signature', async () => {
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await createDriver(token);
+
+    const { status, data } = await request(
+      'POST',
+      '/api/kyc/webhook/didit',
+      { vendor_data: userId, status: 'in_progress' },
+      undefined,
+      webhookHeaders({ 'X-Signature-V2': 'valid' }),
+    );
+
+    expect(status).toBe(200);
+    expect(data.message).toBe('Webhook processed');
+  });
+
+  test('POST /webhook without X-Timestamp header returns 401', async () => {
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await createDriver(token);
+
+    const { status, data } = await request(
+      'POST',
+      '/api/kyc/webhook/didit',
+      { vendor_data: userId, status: 'in_progress' },
+      undefined,
+      { 'X-Didit-Signature': 'valid' },
+    );
+
+    expect(status).toBe(401);
+    expect(data.error).toBe('Unauthorized');
+    expect(data.message).toBe('Missing X-Timestamp header');
+  });
+
+  test('POST /webhook with expired X-Timestamp returns 401', async () => {
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await createDriver(token);
+
+    const expiredTs = String(Math.floor(Date.now() / 1000) - 600);
+
+    const { status, data } = await request(
+      'POST',
+      '/api/kyc/webhook/didit',
+      { vendor_data: userId, status: 'in_progress' },
+      undefined,
+      webhookHeaders({ 'X-Didit-Signature': 'valid', 'X-Timestamp': expiredTs }),
+    );
+
+    expect(status).toBe(401);
+    expect(data.error).toBe('Unauthorized');
+    expect(data.message).toBe('Timestamp expired');
+  });
+
+  test('POST /webhook with timestamp within window processes normally', async () => {
+    const { token, userId } = await registerAndGetTokenAndUser(phone, password);
+    await createDriver(token);
+
+    const recentTs = String(Math.floor(Date.now() / 1000) - 60);
+
+    const { status, data } = await request(
+      'POST',
+      '/api/kyc/webhook/didit',
+      { vendor_data: userId, status: 'in_progress' },
+      undefined,
+      webhookHeaders({ 'X-Didit-Signature': 'valid', 'X-Timestamp': recentTs }),
+    );
+
+    expect(status).toBe(200);
+    expect(data.message).toBe('Webhook processed');
   });
 });
