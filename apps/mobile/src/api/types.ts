@@ -115,6 +115,10 @@ export const tripSchema = z.object({
   is_collected: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),
+  passenger_name: z.string().nullable(),
+  passenger_avatar_url: z.string().nullable(),
+  passenger_phone: z.string().nullable(),
+  passenger_rating: z.number().nullable(),
 });
 
 export const earningsDailySchema = z.object({
