@@ -132,6 +132,13 @@ async function transitionTrip(driverId: string, tripId: string, targetStatus: st
     await tx.update(trips).set(updateData).where(eq(trips.id, tripId));
     await recordEvent(tripId, trip.status, actualTarget, tx);
 
+    if (actualTarget === 'completed') {
+      await tx
+        .update(drivers)
+        .set({ total_trips: sql`${drivers.total_trips} + 1` })
+        .where(eq(drivers.id, driverId));
+    }
+
     const [updated] = await tx.select().from(trips).where(eq(trips.id, tripId));
     return updated;
   });
