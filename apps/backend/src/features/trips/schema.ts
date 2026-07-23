@@ -19,4 +19,5 @@ export const createTripBody = t.Object({
 
 export const collectBody = t.Object({
   payment_method: t.Union([t.Literal('cash'), t.Literal('mercadopago')]),
+  mp_payment_id: t.Optional(t.String()),
 });

@@ -4,6 +4,7 @@ import { getDriverId } from '../../shared/db/queries';
 import { drivers, tripEvents, trips } from '../../shared/db/schema';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
+import { getPayment } from '../../shared/lib/mercado-pago';
 import { calculateFare, calculatePlatformFee } from '../../shared/lib/pricing';
 import { sendPushToUser } from '../../shared/lib/push';
 import type { AuthUser } from '../../shared/middleware/auth';
@@ -246,8 +247,31 @@ export const tripService = {
     return findTrip(driverId, tripId);
   },
 
-  async collectTrip(user: AuthUser, tripId: string, paymentMethod: 'cash' | 'mercadopago') {
+  async collectTrip(
+    user: AuthUser,
+    tripId: string,
+    paymentMethod: 'cash' | 'mercadopago',
+    mpPaymentId?: string,
+  ) {
     const driverId = await getDriverId(user);
+
+    const [preCheck] = await db
+      .select({ is_collected: trips.is_collected })
+      .from(trips)
+      .where(eq(trips.id, tripId))
+      .limit(1);
+
+    if (preCheck?.is_collected) {
+      throw new AppError('Payment already collected for this trip', 400, 'BAD_REQUEST');
+    }
+
+    if (paymentMethod === 'mercadopago' && mpPaymentId) {
+      const paymentInfo = await getPayment(mpPaymentId);
+
+      if (paymentInfo.status !== 'approved') {
+        throw new AppError(`Payment not approved: ${paymentInfo.status}`, 400, 'BAD_REQUEST');
+      }
+    }
 
     return db.transaction(async (tx) => {
       const trip = await findTrip(driverId, tripId, tx);
