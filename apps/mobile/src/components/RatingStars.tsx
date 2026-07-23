@@ -8,7 +8,8 @@ interface RatingStarsProps {
 }
 
 export const RatingStars: React.FC<RatingStarsProps> = ({ rating, size = 14 }) => {
-  const fullStars = Math.floor(rating);
+  const clamped = Math.max(0, Math.min(5, rating));
+  const fullStars = Math.floor(clamped);
   const totalStars = 5;
   const stars = '★'.repeat(fullStars) + '☆'.repeat(totalStars - fullStars);
 
@@ -16,7 +17,7 @@ export const RatingStars: React.FC<RatingStarsProps> = ({ rating, size = 14 }) =
     <View style={styles.container} testID="rating-stars">
       <Text style={[styles.stars, { fontSize: size, color: theme.colors.amber }]}>{stars}</Text>
       <Text style={[styles.value, { fontSize: size, color: theme.colors.amber }]}>
-        {rating.toFixed(1)}
+        {clamped.toFixed(1)}
       </Text>
     </View>
   );

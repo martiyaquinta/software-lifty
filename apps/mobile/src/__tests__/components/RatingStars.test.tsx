@@ -51,19 +51,27 @@ describe('RatingStars', () => {
     expect(valueText.props.children).toBe('4.2');
   });
 
-  test('uses default size when size prop is not provided', async () => {
-    const { getByTestId } = await render(<RatingStars rating={4.0} />);
+  test('uses default size 14 when size prop is not provided', async () => {
+    const { getByText } = await render(<RatingStars rating={4.0} />);
 
-    const container = getByTestId('rating-stars');
-    expect(container).toBeTruthy();
-    expect(container.children).toHaveLength(2);
+    const valueText = getByText('4.0') as unknown as {
+      props: { style: Array<{ fontSize?: number }> };
+    };
+    const inlineStyle = valueText.props.style.find(
+      (s) => s?.fontSize !== undefined,
+    );
+    expect(inlineStyle?.fontSize).toBe(14);
   });
 
-  test('applies custom size prop without errors', async () => {
-    const { getByTestId } = await render(<RatingStars rating={4.5} size={20} />);
+  test('applies custom size 20 prop', async () => {
+    const { getByText } = await render(<RatingStars rating={4.5} size={20} />);
 
-    const container = getByTestId('rating-stars');
-    expect(container).toBeTruthy();
-    expect(container.children).toHaveLength(2);
+    const valueText = getByText('4.5') as unknown as {
+      props: { style: Array<{ fontSize?: number }> };
+    };
+    const inlineStyle = valueText.props.style.find(
+      (s) => s?.fontSize !== undefined,
+    );
+    expect(inlineStyle?.fontSize).toBe(20);
   });
 });
