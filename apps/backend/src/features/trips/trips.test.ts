@@ -6,7 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { eq } from 'drizzle-orm';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
-import { drivers, tripEvents, trips, users } from '../../shared/db/schema';
+import { drivers, ratings, tripEvents, trips, users } from '../../shared/db/schema';
 import { createTestAuthPlugin, createTestToken } from '../../shared/testing/utils';
 
 let app: any;
@@ -670,5 +670,114 @@ describe('Trip State Machine', () => {
     expect(await callComplete()).toBe(400);
 
     expect(await callComplete()).toBe(429);
+  });
+
+  test('20. GET /active returns passenger fields as null when no passenger_id set', async () => {
+    const token = await registerAndGetToken(phone, password);
+    await createDriverRow(token);
+
+    const { data: trip } = await request(
+      'POST',
+      '/api/trips',
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
+      token,
+    );
+
+    await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
+
+    const { status, data } = await request('GET', '/api/trips/active', undefined, token);
+
+    expect(status).toBe(200);
+    expect(data).not.toBeNull();
+    expect(data.passenger_name).toBeNull();
+    expect(data.passenger_avatar_url).toBeNull();
+    expect(data.passenger_phone).toBeNull();
+    expect(data.passenger_rating).toBeNull();
+    expect(data.passenger_id).toBeNull();
+  });
+
+  test('21. GET /:id returns passenger fields when passenger_id is set', async () => {
+    const token = await registerAndGetToken(phone, password);
+    await createDriverRow(token);
+
+    const db = getDb();
+    const [passenger] = await db
+      .insert(users)
+      .values({ phone: '+5492612222222', full_name: 'John Passenger', role: 'driver' })
+      .returning({ id: users.id });
+
+    const { data: trip } = await request(
+      'POST',
+      '/api/trips',
+      {
+        origin_lat: -31.9,
+        origin_lng: -65.0,
+        dest_lat: -31.88,
+        dest_lng: -65.02,
+        vehicle_type: 'car',
+        distance_km: 5,
+        duration_minutes: 15,
+        passenger_id: passenger.id,
+      },
+      token,
+    );
+
+    const { status, data } = await request('GET', `/api/trips/${trip.id}`, undefined, token);
+
+    expect(status).toBe(200);
+    expect(data.id).toBe(trip.id);
+    expect(data.passenger_name).toBe('John Passenger');
+    expect(data.passenger_avatar_url).toBeNull();
+    expect(data.passenger_phone).toBe('+5492612222222');
+    expect(data.passenger_rating).toBeNull();
+  });
+
+  test('22. GET /:id returns passenger rating when ratings exist', async () => {
+    const token = await registerAndGetToken(phone, password);
+    await createDriverRow(token);
+
+    const db = getDb();
+    const [passenger] = await db
+      .insert(users)
+      .values({ phone: '+5492613333333', full_name: 'Rated Passenger', role: 'driver' })
+      .returning({ id: users.id });
+
+    const { data: trip } = await request(
+      'POST',
+      '/api/trips',
+      {
+        origin_lat: -31.9,
+        origin_lng: -65.0,
+        dest_lat: -31.88,
+        dest_lng: -65.02,
+        vehicle_type: 'car',
+        distance_km: 5,
+        duration_minutes: 15,
+        passenger_id: passenger.id,
+      },
+      token,
+    );
+
+    await db.insert(ratings).values({
+      trip_id: trip.id,
+      rater_id: passenger.id,
+      ratee_id: passenger.id,
+      score: 4,
+    });
+
+    await db.insert(ratings).values({
+      trip_id: trip.id,
+      rater_id: passenger.id,
+      ratee_id: passenger.id,
+      score: 5,
+    });
+
+    const { status, data } = await request('GET', `/api/trips/${trip.id}`, undefined, token);
+
+    expect(status).toBe(200);
+    expect(data.id).toBe(trip.id);
+    expect(data.passenger_name).toBe('Rated Passenger');
+    expect(data.passenger_phone).toBe('+5492613333333');
+    expect(data.passenger_rating).toBe(4.5);
   });
 });

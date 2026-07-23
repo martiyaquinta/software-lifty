@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray, not, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, inArray, not, sql } from 'drizzle-orm';
 import { db } from '../../shared/db/client';
 import { getDriverId } from '../../shared/db/queries';
-import { drivers, tripEvents, trips } from '../../shared/db/schema';
+import { drivers, ratings, tripEvents, trips, users } from '../../shared/db/schema';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
 import { getPayment } from '../../shared/lib/mercado-pago';
@@ -229,8 +229,19 @@ export const tripService = {
   async getActiveTrip(user: AuthUser) {
     const driverId = await getDriverId(user);
     const result = await db
-      .select()
+      .select({
+        ...getTableColumns(trips),
+        passenger_name: users.full_name,
+        passenger_avatar_url: users.avatar_url,
+        passenger_phone: users.phone,
+        passenger_rating: sql<number | null>`(
+          SELECT ROUND(AVG(r.score)::numeric, 1)::float
+          FROM ${ratings} r
+          WHERE r.ratee_id = ${trips.passenger_id}
+        )`,
+      })
       .from(trips)
+      .leftJoin(users, eq(trips.passenger_id, users.id))
       .where(and(eq(trips.driver_id, driverId), not(inArray(trips.status, TERMINAL_STATUSES))))
       .orderBy(desc(trips.created_at))
       .limit(1);
@@ -251,7 +262,24 @@ export const tripService = {
 
   async getTripById(user: AuthUser, tripId: string) {
     const driverId = await getDriverId(user);
-    return findTrip(driverId, tripId);
+    const [trip] = await db
+      .select({
+        ...getTableColumns(trips),
+        passenger_name: users.full_name,
+        passenger_avatar_url: users.avatar_url,
+        passenger_phone: users.phone,
+        passenger_rating: sql<number | null>`(
+          SELECT ROUND(AVG(r.score)::numeric, 1)::float
+          FROM ${ratings} r
+          WHERE r.ratee_id = ${trips.passenger_id}
+        )`,
+      })
+      .from(trips)
+      .leftJoin(users, eq(trips.passenger_id, users.id))
+      .where(and(eq(trips.id, tripId), eq(trips.driver_id, driverId)))
+      .limit(1);
+    if (!trip) throw new NotFoundError('Trip not found');
+    return trip;
   },
 
   async collectTrip(
