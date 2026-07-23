@@ -259,7 +259,7 @@ export const ProfileScreen: React.FC = () => {
             </View>
             <View style={styles.stat}>
               <Text style={styles.statValue}>{yearsActive}</Text>
-              <Text style={styles.statLabel}>Anos</Text>
+              <Text style={styles.statLabel}>Años</Text>
             </View>
           </View>
           <Button title="EDITAR PERFIL" variant="secondary" onPress={openEdit} />
