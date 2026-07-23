@@ -4,6 +4,7 @@ process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { createApp } from '../../index';
 import { getDb, resetDb } from '../../shared/db/client';
+import { resetMockOverrides, setMockOverrides } from '../../shared/lib/mercado-pago';
 import {
   drivers,
   payments,
@@ -84,6 +85,7 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await truncateTables();
+  resetMockOverrides();
 });
 
 afterAll(async () => {
@@ -332,5 +334,197 @@ describe('Payments + Withdrawals', () => {
 
     expect(status).toBe(401);
     expect(data.error).toBe('Unauthorized');
+  });
+
+  test('POST /withdraw with MP rejecting payout sets withdrawal status to rejected', async () => {
+    const token = await registerAndGetToken(phone, password);
+    await createDriverRow(token);
+    const pmId = await addPaymentMethod(token, '0000003100088888888888');
+
+    const { data: trip } = await request(
+      'POST',
+      '/api/trips',
+      {
+        origin_lat: -31.9,
+        origin_lng: -65.0,
+        dest_lat: -31.88,
+        dest_lng: -65.02,
+        vehicle_type: 'car',
+        distance_km: 5,
+        duration_minutes: 10,
+      },
+      token,
+    );
+
+    await request(
+      'POST',
+      '/api/payments/webhook/mercadopago',
+      { payment_id: 'mp-test-reject', trip_id: trip.id },
+      undefined,
+      { 'X-MP-Signature': 'valid-sig' },
+    );
+
+    setMockOverrides({
+      createWithdrawal: (amount) => ({ id: 'mp-rejected-001', amount, status: 'rejected' }),
+    });
+
+    const { status, data } = await request(
+      'POST',
+      '/api/payments/withdraw',
+      { amount: 500, payout_method_id: pmId },
+      token,
+    );
+
+    expect(status).toBe(200);
+    expect(data.status).toBe('rejected');
+
+    const db = getDb();
+    const [withdrawal] = await db.select().from(withdrawals);
+    expect(withdrawal).not.toBeNull();
+    expect(withdrawal!.status).toBe('rejected');
+    expect(withdrawal!.mp_withdrawal_id).toBe('mp-rejected-001');
+  });
+
+  test('POST /withdraw with MP network error sets withdrawal status to failed', async () => {
+    const token = await registerAndGetToken(phone, password);
+    await createDriverRow(token);
+    const pmId = await addPaymentMethod(token, '0000003100088888888888');
+
+    const { data: trip } = await request(
+      'POST',
+      '/api/trips',
+      {
+        origin_lat: -31.9,
+        origin_lng: -65.0,
+        dest_lat: -31.88,
+        dest_lng: -65.02,
+        vehicle_type: 'car',
+        distance_km: 5,
+        duration_minutes: 10,
+      },
+      token,
+    );
+
+    await request(
+      'POST',
+      '/api/payments/webhook/mercadopago',
+      { payment_id: 'mp-test-network-error', trip_id: trip.id },
+      undefined,
+      { 'X-MP-Signature': 'valid-sig' },
+    );
+
+    setMockOverrides({
+      createWithdrawal: () => {
+        throw new Error('MercadoPago createWithdrawal failed: 503 Service Unavailable');
+      },
+    });
+
+    const { status, data } = await request(
+      'POST',
+      '/api/payments/withdraw',
+      { amount: 500, payout_method_id: pmId },
+      token,
+    );
+
+    expect(status).toBe(500);
+    expect(data.error.code).toBe('INTERNAL_ERROR');
+
+    const db = getDb();
+    const [withdrawal] = await db.select().from(withdrawals);
+    expect(withdrawal).not.toBeNull();
+    expect(withdrawal!.status).toBe('failed');
+    expect(withdrawal!.mp_withdrawal_id).toBeNull();
+  });
+
+  test('POST /withdraw with concurrent requests preserves balance integrity', async () => {
+    const token = await registerAndGetToken(phone, password);
+    await createDriverRow(token);
+    const pmId = await addPaymentMethod(token, '0000003100088888888888');
+
+    const { data: trip } = await request(
+      'POST',
+      '/api/trips',
+      {
+        origin_lat: -31.9,
+        origin_lng: -65.0,
+        dest_lat: -31.88,
+        dest_lng: -65.02,
+        vehicle_type: 'car',
+        distance_km: 5,
+        duration_minutes: 10,
+      },
+      token,
+    );
+
+    await request(
+      'POST',
+      '/api/payments/webhook/mercadopago',
+      { payment_id: 'mp-test-race', trip_id: trip.id },
+      undefined,
+      { 'X-MP-Signature': 'valid-sig' },
+    );
+
+    const results = await Promise.allSettled([
+      request('POST', '/api/payments/withdraw', { amount: 800, payout_method_id: pmId }, token),
+      request('POST', '/api/payments/withdraw', { amount: 800, payout_method_id: pmId }, token),
+    ]);
+
+    const succeeded = results.filter(
+      (r) => r.status === 'fulfilled' && r.value.status === 200,
+    ).length;
+    const failed = results.filter(
+      (r) => r.status === 'fulfilled' && r.value.status !== 200,
+    ).length;
+
+    expect(succeeded + failed).toBe(2);
+    expect(succeeded).toBeLessThanOrEqual(1);
+    expect(failed).toBeGreaterThanOrEqual(1);
+
+    const db = getDb();
+    const withdrawalRows = await db.select().from(withdrawals);
+    const totalWithdrawn = withdrawalRows
+      .filter((w) => w.status === 'processed')
+      .reduce((sum, w) => sum + w.amount, 0);
+
+    expect(totalWithdrawn).toBeLessThanOrEqual(1200);
+  });
+
+  test('POST /withdraw without payout method returns error', async () => {
+    const token = await registerAndGetToken(phone, password);
+    await createDriverRow(token);
+
+    const { data: trip } = await request(
+      'POST',
+      '/api/trips',
+      {
+        origin_lat: -31.9,
+        origin_lng: -65.0,
+        dest_lat: -31.88,
+        dest_lng: -65.02,
+        vehicle_type: 'car',
+        distance_km: 5,
+        duration_minutes: 10,
+      },
+      token,
+    );
+
+    await request(
+      'POST',
+      '/api/payments/webhook/mercadopago',
+      { payment_id: 'mp-test-no-pm', trip_id: trip.id },
+      undefined,
+      { 'X-MP-Signature': 'valid-sig' },
+    );
+
+    const { status, data } = await request(
+      'POST',
+      '/api/payments/withdraw',
+      { amount: 100, payout_method_id: '00000000-0000-0000-0000-000000000000' },
+      token,
+    );
+
+    expect(status).toBe(404);
+    expect(data.error.code).toBe('NOT_FOUND');
+    expect(data.error.message).toBe('Payout method not found');
   });
 });

@@ -13,12 +13,43 @@ export interface WithdrawalInfo {
   status: string; // 'pending', 'processed', 'rejected'
 }
 
+export interface MockOverrides {
+  getPayment?: (paymentId: string) => PaymentInfo | Promise<PaymentInfo>;
+  createWithdrawal?: (
+    amount: number,
+    cvu: string,
+    description?: string,
+    idempotencyKey?: string,
+  ) => WithdrawalInfo | Promise<WithdrawalInfo>;
+}
+
+const mockOverrides: MockOverrides = {};
+
+export function setMockOverrides(overrides: MockOverrides | null): void {
+  if (overrides === null) {
+    mockOverrides.getPayment = undefined;
+    mockOverrides.createWithdrawal = undefined;
+  } else {
+    if (overrides.getPayment !== undefined) mockOverrides.getPayment = overrides.getPayment;
+    if (overrides.createWithdrawal !== undefined)
+      mockOverrides.createWithdrawal = overrides.createWithdrawal;
+  }
+}
+
+export function resetMockOverrides(): void {
+  mockOverrides.getPayment = undefined;
+  mockOverrides.createWithdrawal = undefined;
+}
+
 function isMockMode(): boolean {
   return process.env.NODE_ENV !== 'production' || !process.env.MERCADOPAGO_ACCESS_TOKEN;
 }
 
 export async function getPayment(paymentId: string): Promise<PaymentInfo> {
   if (isMockMode()) {
+    if (mockOverrides.getPayment) {
+      return mockOverrides.getPayment(paymentId);
+    }
     return { id: paymentId, amount: 1500, status: 'approved', payer_email: 'test@test.com' };
   }
   const token = process.env.MERCADOPAGO_ACCESS_TOKEN!;
@@ -44,6 +75,9 @@ export async function createWithdrawal(
   idempotencyKey?: string,
 ): Promise<WithdrawalInfo> {
   if (isMockMode()) {
+    if (mockOverrides.createWithdrawal) {
+      return mockOverrides.createWithdrawal(amount, cvu, description, idempotencyKey);
+    }
     return { id: crypto.randomUUID(), amount, status: 'processed' };
   }
   const token = process.env.MERCADOPAGO_ACCESS_TOKEN!;
