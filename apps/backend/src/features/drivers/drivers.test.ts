@@ -1,5 +1,9 @@
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://lifty:lifty@localhost:5433/lifty_test';
+process.env.SUPABASE_URL = undefined;
+process.env.SUPABASE_PUBLISHABLE_KEY = undefined;
+process.env.SUPABASE_SECRET_KEY = undefined;
+process.env.REDIS_URL = undefined;
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
@@ -8,10 +12,40 @@ import { getDb, resetDb } from '../../shared/db/client';
 import { districts, driverDocuments, drivers, users, vehicles } from '../../shared/db/schema';
 import { DOC_TYPES } from '../../shared/lib/documents';
 import { getRedis } from '../../shared/lib/redis';
-import { extractStoragePath } from '../../shared/lib/storage';
+import { extractStoragePath, type StorageProvider } from '../../shared/lib/storage';
 import { createTestToken } from '../../shared/testing/utils';
+import { setStorageForTesting } from './service';
+
+interface TestStorage extends StorageProvider {
+  uploaded: Map<string, string>;
+  deleted: string[];
+}
+
+function createTestStorage() {
+  const uploaded = new Map<string, string>();
+  const deleted: string[] = [];
+  const storage: TestStorage = {
+    uploaded,
+    deleted,
+    async uploadFile(_file: File, path: string) {
+      const url = `https://example.supabase.co/storage/v1/object/public/driver-documents/${path}`;
+      uploaded.set(path, url);
+      return url;
+    },
+    async deleteFile(path: string) {
+      deleted.push(path);
+    },
+    extractStoragePath(url: string | null) {
+      if (!url) return null;
+      const match = url.match(/\/driver-documents\/(.+)/);
+      return match ? match[1] : null;
+    },
+  };
+  return storage;
+}
 
 let app: any;
+let baseStorage: TestStorage;
 
 async function truncateTables() {
   const db = getDb();
@@ -65,6 +99,8 @@ async function fullOnboarding(phone: string, password: string) {
 }
 
 beforeAll(() => {
+  baseStorage = createTestStorage();
+  setStorageForTesting(baseStorage);
   app = createApp();
 });
 
@@ -140,7 +176,7 @@ describe('Driver Profile', () => {
     expect(data.email).toBeNull();
     expect(data.full_name).toBe('Juan Perez');
     expect(data.avatar_url).toBeNull();
-    expect(data.status).toBe('documents');
+    expect(data.status).toBe('pending');
     expect(data.kyc_status).toBe('approved');
     expect(data.rating_avg).toBe(0);
     expect(data.total_trips).toBe(0);
@@ -593,16 +629,168 @@ describe('extractStoragePath', () => {
     expect(path).toBe('avatars/user123-4567890');
   });
 
-  test('extracts path from mock URL', () => {
-    const path = extractStoragePath('mock://storage.lifty/avatars/user123-4567890');
-    expect(path).toBe('avatars/user123-4567890');
-  });
-
   test('returns null for null input', () => {
     expect(extractStoragePath(null)).toBeNull();
   });
 
   test('returns null for unrecognized URL format', () => {
     expect(extractStoragePath('https://example.com/photo.jpg')).toBeNull();
+  });
+
+  test('extracts path from signed URL', () => {
+    const path = extractStoragePath(
+      'https://abc.supabase.co/storage/v1/object/sign/driver-documents/drivers/doc-123',
+    );
+    expect(path).toBe('drivers/doc-123');
+  });
+});
+
+describe('reuploadDocument storage flow', () => {
+  const phone = '+5492615555555';
+  const password = 'testPass123';
+
+  test('deletes previous file from storage and uploads new one', async () => {
+    const { token, driverId } = await fullOnboarding(phone, password);
+    const db = getDb();
+
+    await db.insert(driverDocuments).values({
+      driver_id: driverId,
+      doc_type: 'license_front',
+      file_url: 'https://example.supabase.co/storage/v1/object/public/driver-documents/drivers/old-license.png',
+      status: 'approved',
+    });
+
+    const testStorage = createTestStorage();
+    setStorageForTesting(testStorage);
+
+    const { status, data } = await reupload(token, 'license_front');
+    expect(status).toBe(200);
+    expect(data.status).toBe('pending_review');
+
+    expect(testStorage.deleted).toContain('drivers/old-license.png');
+    expect(testStorage.uploaded.size).toBe(1);
+
+    const docs = await db
+      .select()
+      .from(driverDocuments)
+      .where(eq(driverDocuments.driver_id, driverId))
+      .orderBy(driverDocuments.created_at);
+
+    const superseded = docs.filter((d) => d.status === 'superseded');
+    const pending = docs.filter((d) => d.status === 'pending_review');
+    expect(superseded.length).toBe(1);
+    expect(pending.length).toBe(1);
+    expect(pending[0].file_url).toBe(data.file_url);
+  });
+
+  test('re-upload works when there is no previous document', async () => {
+    const { token, driverId } = await fullOnboarding(phone, password);
+
+    const testStorage = createTestStorage();
+    setStorageForTesting(testStorage);
+
+    const { status, data } = await reupload(token, 'registration_front');
+    expect(status).toBe(200);
+    expect(data.status).toBe('pending_review');
+
+    expect(testStorage.deleted.length).toBe(0);
+    expect(testStorage.uploaded.size).toBe(1);
+
+    const db = getDb();
+    const docs = await db
+      .select()
+      .from(driverDocuments)
+      .where(eq(driverDocuments.driver_id, driverId));
+
+    expect(docs.length).toBe(1);
+    expect(docs[0].doc_type).toBe('registration_front');
+    expect(docs[0].status).toBe('pending_review');
+  });
+
+  test('handles previous doc with non-extractable storage URL gracefully', async () => {
+    const { token, driverId } = await fullOnboarding(phone, password);
+    const db = getDb();
+
+    await db.insert(driverDocuments).values({
+      driver_id: driverId,
+      doc_type: 'license_front',
+      file_url: 'https://legacy-cdn.example.com/files/doc.png',
+      status: 'approved',
+    });
+
+    const testStorage = createTestStorage();
+    setStorageForTesting(testStorage);
+
+    const { status, data } = await reupload(token, 'license_front');
+    expect(status).toBe(200);
+    expect(data.status).toBe('pending_review');
+
+    expect(testStorage.deleted.length).toBe(0);
+    expect(testStorage.uploaded.size).toBe(1);
+
+    const docs = await db
+      .select()
+      .from(driverDocuments)
+      .where(eq(driverDocuments.driver_id, driverId));
+
+    const superseded = docs.filter((d) => d.status === 'superseded');
+    expect(superseded.length).toBe(1);
+    expect(superseded[0].file_url).toBe('https://legacy-cdn.example.com/files/doc.png');
+  });
+
+  test('upload failure preserves existing document state', async () => {
+    const { token, driverId } = await fullOnboarding(phone, password);
+    const db = getDb();
+
+    await db.insert(driverDocuments).values({
+      driver_id: driverId,
+      doc_type: 'insurance_front',
+      file_url: 'https://example.supabase.co/storage/v1/object/public/driver-documents/drivers/insurance.png',
+      status: 'approved',
+    });
+
+    const failStorage = createTestStorage();
+    failStorage.uploadFile = async () => {
+      throw new Error('Storage unreachable');
+    };
+    setStorageForTesting(failStorage);
+
+    const { status } = await reupload(token, 'insurance_front');
+    expect(status).toBe(500);
+
+    const docs = await db
+      .select()
+      .from(driverDocuments)
+      .where(eq(driverDocuments.driver_id, driverId));
+
+    expect(docs.length).toBe(1);
+    expect(docs[0].status).toBe('approved');
+    expect(docs[0].file_url).toContain('insurance.png');
+  });
+
+  test('rejects invalid doc_type with 400', async () => {
+    const { token } = await fullOnboarding(phone, password);
+    const { status, data } = await reupload(token, 'passport_photo');
+    expect(status).toBe(400);
+    expect(data.error.code).toBe('BAD_REQUEST');
+  });
+
+  test('returns 404 when driver has no profile', async () => {
+    const { token } = await registerAndGetToken(phone, password);
+    const { status, data } = await reupload(token, 'license_front');
+    expect(status).toBe(404);
+    expect(data.error.message).toContain('onboarding');
+  });
+
+  test('returns 401 without authentication', async () => {
+    const formData = new FormData();
+    formData.append('file', new Blob(['content'], { type: 'image/png' }), 'doc.png');
+    formData.append('doc_type', 'license_front');
+    const req = new Request('http://localhost/api/drivers/me/documents/reupload', {
+      method: 'POST',
+      body: formData,
+    });
+    const res = await app.handle(req);
+    expect(res.status).toBe(401);
   });
 });

@@ -11,7 +11,13 @@ import {
 import { DOC_TYPES } from '../../shared/lib/documents';
 import { AppError, NotFoundError } from '../../shared/lib/errors';
 import { logger } from '../../shared/lib/logger';
-import { deleteFile, extractStoragePath, uploadFile } from '../../shared/lib/storage';
+import { type StorageProvider, supabaseStorage } from '../../shared/lib/storage';
+
+let _storage: StorageProvider = supabaseStorage;
+
+export function setStorageForTesting(sp: StorageProvider) {
+  _storage = sp;
+}
 import type { AuthUser } from '../../shared/middleware/auth';
 import { notifyAdminNewDriver } from '../admin/notifications';
 
@@ -466,7 +472,7 @@ export const driversService = {
     }
 
     const path = `${driver.id}/${docType}-${Date.now()}`;
-    const fileUrl = await uploadFile(file, path);
+    const fileUrl = await _storage.uploadFile(file, path);
 
     await db
       .update(driverDocuments)
@@ -521,13 +527,13 @@ export const driversService = {
       .where(eq(users.id, user.id))
       .limit(1);
 
-    const oldPath = extractStoragePath(currentUser?.avatar_url ?? null);
+    const oldPath = _storage.extractStoragePath(currentUser?.avatar_url ?? null);
     if (oldPath) {
-      await deleteFile(oldPath);
+      await _storage.deleteFile(oldPath);
     }
 
     const path = `avatars/${driver?.id ?? user.id}-${Date.now()}`;
-    const fileUrl = await uploadFile(file, path);
+    const fileUrl = await _storage.uploadFile(file, path);
 
     await db
       .update(users)
@@ -580,8 +586,39 @@ export const driversService = {
 
     if (!driver) throw new NotFoundError('Driver profile not found. Complete onboarding first');
 
+    // Delete previous file from storage before uploading the new one.
+    // Best-effort: if deletion fails we log and continue — the old file becomes
+    // orphaned but the re-upload itself is not blocked.
+    const [previousDoc] = await db
+      .select({ file_url: driverDocuments.file_url })
+      .from(driverDocuments)
+      .where(
+        and(
+          eq(driverDocuments.driver_id, driver.id),
+          eq(driverDocuments.doc_type, docType),
+          ne(driverDocuments.status, 'superseded'),
+        ),
+      )
+      .limit(1);
+
+    if (previousDoc) {
+      const storagePath = _storage.extractStoragePath(previousDoc.file_url);
+      if (storagePath) {
+        try {
+          await _storage.deleteFile(storagePath);
+        } catch (err) {
+          logger.warn('[DOCS] Failed to delete previous doc from storage', {
+            driverId: driver.id,
+            docType,
+            path: storagePath,
+            error: (err as Error).message,
+          });
+        }
+      }
+    }
+
     const path = `${driver.id}/${docType}-${Date.now()}`;
-    const fileUrl = await uploadFile(file, path);
+    const fileUrl = await _storage.uploadFile(file, path);
 
     // Supersede any prior non-superseded doc of the same type.
     await db
@@ -615,9 +652,6 @@ export const driversService = {
     const isSensitive = SENSITIVE_DOC_TYPES.has(docType);
 
     if (isSensitive) {
-      // Notify admin = put the driver back in the pending review queue
-      // (adminService.listPending filters by status='review'). Force offline
-      // and gate "online" until the change is approved.
       await db
         .update(drivers)
         .set({
@@ -751,7 +785,11 @@ export const driversService = {
     const row = rows[0];
 
     if (!row || !row.id) {
-      return { step: 'step1', message: 'Onboarding not started' };
+      return {
+        step: 'step1',
+        message: 'Onboarding not started',
+        avatar_url: row?.avatar_url ?? null,
+      };
     }
 
     return {
