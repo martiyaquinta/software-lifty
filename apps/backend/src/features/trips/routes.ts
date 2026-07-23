@@ -100,6 +100,9 @@ export const tripRoutes = new Elysia({ prefix: '/trips' })
   .put(
     '/:id/collect',
     ({ user, params, body, set }) =>
-      safeCall(() => tripService.collectTrip(user, params.id, body.payment_method), set),
+      safeCall(
+        () => tripService.collectTrip(user, params.id, body.payment_method, body.mp_payment_id),
+        set,
+      ),
     { params: tripIdParams, body: collectBody, requireAuth: true },
   );
