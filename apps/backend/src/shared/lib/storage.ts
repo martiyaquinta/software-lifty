@@ -32,8 +32,9 @@ async function retry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 1000): Pro
 export async function uploadFile(file: File, path: string): Promise<string> {
   const client = getClient();
   if (!client) {
-    logger.info('[STORAGE] Upload (mock):', path, `(${file.size} bytes)`);
-    return `mock://storage.lifty/${path}`;
+    throw new Error(
+      'Supabase Storage is not configured. Set SUPABASE_URL and SUPABASE_SECRET_KEY.',
+    );
   }
 
   const { data, error } = await retry(() =>
@@ -48,7 +49,9 @@ export async function uploadFile(file: File, path: string): Promise<string> {
 export async function getSignedUrl(path: string, expiresIn = 3600): Promise<string> {
   const client = getClient();
   if (!client) {
-    return `mock://storage.lifty/${path}`;
+    throw new Error(
+      'Supabase Storage is not configured. Set SUPABASE_URL and SUPABASE_SECRET_KEY.',
+    );
   }
 
   const { data, error } = await retry(() =>
@@ -61,8 +64,9 @@ export async function getSignedUrl(path: string, expiresIn = 3600): Promise<stri
 export async function deleteFile(path: string): Promise<void> {
   const client = getClient();
   if (!client) {
-    logger.info('[STORAGE] Delete (mock):', path);
-    return;
+    throw new Error(
+      'Supabase Storage is not configured. Set SUPABASE_URL and SUPABASE_SECRET_KEY.',
+    );
   }
 
   try {
@@ -78,8 +82,18 @@ export async function deleteFile(path: string): Promise<void> {
 export function extractStoragePath(url: string | null): string | null {
   if (!url) return null;
 
-  const match = url.match(
-    /(?:\/public\/driver-documents\/|\/sign\/driver-documents\/|mock:\/\/storage\.lifty\/)(.+)/,
-  );
+  const match = url.match(/(?:\/public\/driver-documents\/|\/sign\/driver-documents\/)(.+)/);
   return match ? match[1] : null;
 }
+
+export interface StorageProvider {
+  uploadFile(file: File, path: string): Promise<string>;
+  deleteFile(path: string): Promise<void>;
+  extractStoragePath(url: string | null): string | null;
+}
+
+export const supabaseStorage: StorageProvider = {
+  uploadFile,
+  deleteFile,
+  extractStoragePath,
+};
