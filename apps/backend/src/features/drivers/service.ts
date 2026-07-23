@@ -690,6 +690,7 @@ export const driversService = {
         })
         .from(drivers)
         .where(eq(drivers.user_id, user.id))
+        .for('update')
         .limit(1);
 
       if (!driver) throw new NotFoundError('Driver profile not found');
