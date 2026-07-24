@@ -86,6 +86,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ snapPoints, children, 
   const sheetHeight = expandedHeight;
 
   const handleOverlayPress = () => {
+    'worklet';
     snapTo(0);
     onSnap(0);
   };
