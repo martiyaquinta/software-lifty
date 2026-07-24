@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
-const ONLINE_SINCE_KEY = 'lifty_online_since';
+export const ONLINE_SINCE_KEY = 'lifty_online_since';
 
 interface OnlineState {
   isOnline: boolean;

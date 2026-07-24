@@ -15,14 +15,12 @@ import { useSignOut } from '../hooks/useAuth';
 import { startTracking, stopTracking } from '../lib/location';
 import { subscribeToDriverChannel } from '../lib/realtime';
 import { useAuthStore } from '../store/authStore';
-import { useOnlineStore } from '../store/onlineStore';
+import { ONLINE_SINCE_KEY, useOnlineStore } from '../store/onlineStore';
 import { theme } from '../theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 100;
 const EXPANDED_HEIGHT = SCREEN_HEIGHT * 0.45;
-const ONLINE_SINCE_KEY = 'lifty_online_since';
-
 const formatCurrency = (amount: number) =>
   `$${amount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -56,12 +54,12 @@ export const ActiveScreen: React.FC = () => {
           const ts = Number(stored);
           if (!Number.isNaN(ts)) {
             setOnlineSince(ts);
-            useOnlineStore.getState().setOnline(true);
+            useOnlineStore.setState({ isOnline: true });
           }
         } else {
           const now = Date.now();
           setOnlineSince(now);
-          useOnlineStore.getState().setOnline(true);
+          useOnlineStore.setState({ isOnline: true });
           AsyncStorage.setItem(ONLINE_SINCE_KEY, String(now)).catch(() => {});
         }
       } catch {}
