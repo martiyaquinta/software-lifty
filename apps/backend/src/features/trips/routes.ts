@@ -23,7 +23,7 @@ const cancelRateLimit = rateLimit({
 const completeRateLimit = rateLimit({
   name: 'rate-limit-trip-complete',
   keyPrefix: 'ratelimit:trip:complete:ip',
-  max: Number(process.env.TRIP_COMPLETE_RATE_LIMIT_MAX) || 5,
+  max: Number(process.env.TRIP_COMPLETE_RATE_LIMIT_MAX) || 3,
   windowMs: Number(process.env.TRIP_RATE_LIMIT_WINDOW_MS) || 60_000,
 }).as('scoped');
 
