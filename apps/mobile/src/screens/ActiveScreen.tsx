@@ -1,8 +1,12 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiClient } from '../api/client';
+import type { EarningsDaily } from '../api/types';
+import { BottomSheet } from '../components/BottomSheet';
 import { MapView } from '../components/MapView';
 import { SideMenu } from '../components/SideMenu';
 import { Toggle } from '../components/Toggle';
@@ -14,15 +18,52 @@ import { useAuthStore } from '../store/authStore';
 import { useOnlineStore } from '../store/onlineStore';
 import { theme } from '../theme';
 
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const COLLAPSED_HEIGHT = 100;
+const EXPANDED_HEIGHT = SCREEN_HEIGHT * 0.45;
+const ONLINE_SINCE_KEY = 'lifty_online_since';
+
+const formatCurrency = (amount: number) =>
+  `$${amount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const formatOnlineTime = (ms: number): string => {
+  const totalMinutes = Math.floor(ms / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+};
+
 export const ActiveScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useAppNavigation();
   const setOnline = useOnlineStore((s) => s.setOnline);
+  const onlineSince = useOnlineStore((s) => s.onlineSince);
+  const setOnlineSince = useOnlineStore((s) => s.setOnlineSince);
   const driverId = useAuthStore((s) => s.driverId);
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [onlineTime, setOnlineTime] = useState(0);
   const disconnectedRef = useRef(false);
   const signOut = useSignOut();
+
+  useEffect(() => {
+    const reconcile = async () => {
+      if (onlineSince) return;
+      try {
+        const stored = await AsyncStorage.getItem(ONLINE_SINCE_KEY);
+        if (stored) {
+          const ts = Number(stored);
+          if (!Number.isNaN(ts)) setOnlineSince(ts);
+        } else {
+          const now = Date.now();
+          setOnlineSince(now);
+          AsyncStorage.setItem(ONLINE_SINCE_KEY, String(now)).catch(() => {});
+        }
+      } catch {}
+    };
+    reconcile();
+  }, []);
 
   useEffect(() => {
     const heartbeatInterval = setInterval(() => {
@@ -63,6 +104,15 @@ export const ActiveScreen: React.FC = () => {
     };
   }, [driverId, navigation]);
 
+  useEffect(() => {
+    if (!onlineSince) return;
+    setOnlineTime(Date.now() - onlineSince);
+    const interval = setInterval(() => {
+      setOnlineTime(Date.now() - onlineSince);
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [onlineSince]);
+
   const handleToggle = useCallback(
     async (newValue: boolean) => {
       if (newValue) return;
@@ -87,6 +137,20 @@ export const ActiveScreen: React.FC = () => {
     },
     [setOnline, navigation],
   );
+
+  const { data: earnings } = useQuery<EarningsDaily>({
+    queryKey: ['earnings-daily'],
+    queryFn: async () => {
+      const response = await apiClient.get('/drivers/me/earnings/daily');
+      return response.data.data ?? response.data;
+    },
+    refetchInterval: 60_000,
+    enabled: sheetExpanded,
+  });
+
+  const handleSnapChange = useCallback((index: number) => {
+    setSheetExpanded(index === 1);
+  }, []);
 
   const menuItems = useMemo(
     () => [
@@ -154,14 +218,50 @@ export const ActiveScreen: React.FC = () => {
         </View>
       </View>
 
-      <View style={styles.floatingCard}>
-        <View style={styles.toggleRow}>
-          <Text style={styles.statusOnline}>Estas conectado</Text>
-          <Toggle value={true} onToggle={handleToggle} />
+      <BottomSheet snapPoints={[COLLAPSED_HEIGHT, EXPANDED_HEIGHT]} onSnapChange={handleSnapChange}>
+        <View style={styles.sheetContent}>
+          <View style={styles.toggleRow}>
+            <Text style={styles.statusOnline}>Estas conectado</Text>
+            <Toggle value={true} onToggle={handleToggle} />
+          </View>
+          <Text style={styles.statusOffline}>Desconectado</Text>
+          {toggleError && <Text style={styles.errorText}>{toggleError}</Text>}
+
+          <View style={styles.metricsContainer}>
+            <Text style={styles.metricsTitle}>Resumen de hoy</Text>
+
+            <View style={styles.metricRow}>
+              <Text style={styles.metricLabel}>Viajes completados</Text>
+              <Text style={styles.metricValue}>{earnings?.trip_count ?? '--'}</Text>
+            </View>
+
+            <View style={styles.metricRow}>
+              <Text style={styles.metricLabel}>Ganancias acumuladas</Text>
+              <Text style={styles.metricValue}>
+                {earnings ? formatCurrency(earnings.total) : '--'}
+              </Text>
+            </View>
+
+            <View style={styles.metricRow}>
+              <Text style={styles.metricLabel}>Tiempo online</Text>
+              <Text style={styles.metricValue}>{formatOnlineTime(onlineTime)}</Text>
+            </View>
+
+            <View style={styles.metricRow}>
+              <Text style={styles.metricLabel}>Tasa de aceptacion</Text>
+              <Text style={[styles.metricValue, { color: theme.colors.mediumGray }]}>--</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.earningsButton}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('Earnings')}
+            >
+              <Text style={styles.earningsButtonText}>Ver ganancias</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <Text style={styles.statusOffline}>Desconectado</Text>
-        {toggleError && <Text style={styles.errorText}>{toggleError}</Text>}
-      </View>
+      </BottomSheet>
 
       <SideMenu visible={menuVisible} onClose={() => setMenuVisible(false)} menuItems={menuItems} />
     </View>
@@ -224,24 +324,12 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 20,
   },
-  floatingCard: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: theme.colors.white,
-    borderTopLeftRadius: theme.radius.lg,
-    borderTopRightRadius: theme.radius.lg,
-    paddingTop: theme.spacing.lg,
+  sheetContent: {
+    flex: 1,
     paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.xl,
+    paddingBottom: theme.spacing.md,
     alignItems: 'center',
     gap: theme.spacing.xs,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 8,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -263,5 +351,46 @@ const styles = StyleSheet.create({
     color: theme.colors.dangerRed,
     textAlign: 'center',
     marginTop: theme.spacing.xs,
+  },
+  metricsContainer: {
+    width: '100%',
+    marginTop: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  metricsTitle: {
+    fontSize: theme.fontSize.md,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.deepBlue,
+    marginBottom: theme.spacing.xs,
+  },
+  metricRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.lightGray,
+  },
+  metricLabel: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.mediumGray,
+  },
+  metricValue: {
+    fontSize: theme.fontSize.md,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.deepBlue,
+  },
+  earningsButton: {
+    marginTop: theme.spacing.md,
+    backgroundColor: theme.colors.turquoise,
+    borderRadius: theme.radius.buttonRadius,
+    height: theme.dimensions.buttonHeight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  earningsButtonText: {
+    color: theme.colors.white,
+    fontSize: theme.fontSize.md,
+    fontWeight: theme.fontWeight.bold,
   },
 });
