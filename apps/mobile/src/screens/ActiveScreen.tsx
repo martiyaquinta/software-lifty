@@ -8,10 +8,10 @@ import { SideMenu } from '../components/SideMenu';
 import { Toggle } from '../components/Toggle';
 import { useAppNavigation } from '../hooks/useAppNavigation';
 import { useSignOut } from '../hooks/useAuth';
+import { useHeatmapPolling } from '../hooks/useHeatmapPolling';
 import { startTracking, stopTracking } from '../lib/location';
 import { subscribeToDriverChannel } from '../lib/realtime';
 import { useAuthStore } from '../store/authStore';
-import { useLocationStore } from '../store/locationStore';
 import { useOnlineStore } from '../store/onlineStore';
 import { theme } from '../theme';
 
@@ -21,12 +21,7 @@ export const ActiveScreen: React.FC = () => {
   const setOnline = useOnlineStore((s) => s.setOnline);
   const driverId = useAuthStore((s) => s.driverId);
   const [toggleError, setToggleError] = useState<string | null>(null);
-  const [heatmapPoints, setHeatmapPoints] = useState<
-    Array<{ coordinate: [number, number]; weight: number }>
-  >([]);
-  const lat = useLocationStore((s) => s.lat);
-  const lng = useLocationStore((s) => s.lng);
-  const heatmapIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const heatmapPoints = useHeatmapPolling();
   const [menuVisible, setMenuVisible] = useState(false);
   const disconnectedRef = useRef(false);
   const signOut = useSignOut();
@@ -47,38 +42,6 @@ export const ActiveScreen: React.FC = () => {
       }
     };
   }, []);
-
-  useEffect(() => {
-    const fetchHeatmap = async () => {
-      if (lat == null || lng == null) return;
-      try {
-        const res = await apiClient.get('/maps/heatmap', {
-          params: {
-            sw_lat: lat - 0.05,
-            sw_lng: lng - 0.05,
-            ne_lat: lat + 0.05,
-            ne_lng: lng + 0.05,
-          },
-        });
-        const features = res.data?.features ?? res.data?.data?.features ?? [];
-        setHeatmapPoints(
-          features.map((f: any) => ({
-            coordinate: f.geometry.coordinates as [number, number],
-            weight: f.properties.weight as number,
-          })),
-        );
-      } catch {
-        // keep previous heatmap data on error
-      }
-    };
-
-    fetchHeatmap();
-    heatmapIntervalRef.current = setInterval(fetchHeatmap, 45_000);
-
-    return () => {
-      if (heatmapIntervalRef.current) clearInterval(heatmapIntervalRef.current);
-    };
-  }, [lat, lng]);
 
   useEffect(() => {
     if (!driverId) return;
@@ -169,6 +132,7 @@ export const ActiveScreen: React.FC = () => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={theme.colors.deepBlue} />
 
+      {/* Heatmap hidden naturally when navigating away to IncomingRequest (component unmounts) */}
       <MapView
         style={StyleSheet.absoluteFill as any}
         followUserLocation
