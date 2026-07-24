@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiClient, getValidated } from '../api/client';
@@ -15,6 +15,7 @@ import { SkeletonCard } from '../components/feedback/SkeletonCard';
 import { useAppNavigation } from '../hooks/useAppNavigation';
 import { useSignOut } from '../hooks/useAuth';
 import { stopTracking } from '../lib/location';
+import { useLocationStore } from '../store/locationStore';
 import { useOnlineStore } from '../store/onlineStore';
 import { theme } from '../theme';
 
@@ -26,6 +27,12 @@ export const OnlineScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'home' | 'earnings' | 'profile'>('home');
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [heatmapPoints, setHeatmapPoints] = useState<
+    Array<{ coordinate: [number, number]; weight: number }>
+  >([]);
+  const lat = useLocationStore((s) => s.lat);
+  const lng = useLocationStore((s) => s.lng);
+  const heatmapIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const signOut = useSignOut();
 
   const {
@@ -143,6 +150,38 @@ export const OnlineScreen: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const fetchHeatmap = async () => {
+      if (lat == null || lng == null) return;
+      try {
+        const res = await apiClient.get('/maps/heatmap', {
+          params: {
+            sw_lat: lat - 0.05,
+            sw_lng: lng - 0.05,
+            ne_lat: lat + 0.05,
+            ne_lng: lng + 0.05,
+          },
+        });
+        const features = res.data?.features ?? res.data?.data?.features ?? [];
+        setHeatmapPoints(
+          features.map((f: any) => ({
+            coordinate: f.geometry.coordinates as [number, number],
+            weight: f.properties.weight as number,
+          })),
+        );
+      } catch {
+        // keep previous heatmap data on error
+      }
+    };
+
+    fetchHeatmap();
+    heatmapIntervalRef.current = setInterval(fetchHeatmap, 45_000);
+
+    return () => {
+      if (heatmapIntervalRef.current) clearInterval(heatmapIntervalRef.current);
+    };
+  }, [lat, lng]);
+
   const formatCurrency = (amount: number) =>
     `$${amount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -249,7 +288,7 @@ export const OnlineScreen: React.FC = () => {
         </View>
 
         <View style={styles.mapContainer}>
-          <MapView followUserLocation />
+          <MapView followUserLocation heatmapPoints={heatmapPoints} />
         </View>
 
         {renderEarningsCard()}
