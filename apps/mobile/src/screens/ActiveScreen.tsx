@@ -54,10 +54,14 @@ export const ActiveScreen: React.FC = () => {
         const stored = await AsyncStorage.getItem(ONLINE_SINCE_KEY);
         if (stored) {
           const ts = Number(stored);
-          if (!Number.isNaN(ts)) setOnlineSince(ts);
+          if (!Number.isNaN(ts)) {
+            setOnlineSince(ts);
+            useOnlineStore.getState().setOnline(true);
+          }
         } else {
           const now = Date.now();
           setOnlineSince(now);
+          useOnlineStore.getState().setOnline(true);
           AsyncStorage.setItem(ONLINE_SINCE_KEY, String(now)).catch(() => {});
         }
       } catch {}
