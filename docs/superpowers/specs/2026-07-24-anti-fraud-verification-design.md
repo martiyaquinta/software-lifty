@@ -127,7 +127,7 @@ El modal usa el mismo patrón inline que el modal de cancelar ya existente:
 
 - `POST /trips/:id/start` con código correcto → 200, status `in_trip`
 - `POST /trips/:id/start` con código incorrecto → 400, "no coincide"
-- `POST /trips/:id/start` sin código → 422 (validation)
+- `POST /trips/:id/start` sin código → 400 (Elysia validation errors remapped by global onError)
 - `acceptTrip` genera y guarda `verification_code` de 4 dígitos
 - `acceptTrip` envía push al pasajero con el código
 

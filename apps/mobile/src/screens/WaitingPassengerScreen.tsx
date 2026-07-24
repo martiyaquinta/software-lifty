@@ -143,11 +143,13 @@ export const WaitingPassengerScreen: React.FC = () => {
               title="CANCELAR VIAJE"
               variant="danger"
               onPress={handleCancelConfirm}
+              loading={loading}
               style={styles.modalButton}
             />
             <Button
               title="SEGUIR ESPERANDO"
               onPress={() => setShowModal(false)}
+              disabled={loading}
               style={styles.modalButton}
             />
           </View>
