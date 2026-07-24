@@ -137,6 +137,28 @@ describe('Trip State Machine', () => {
     expect(events[1].to_status).toBe('rejected');
   });
 
+  test('2b. accept generates 4-digit verification_code', async () => {
+    const token = await registerAndGetToken(phone, password);
+    await createDriverRow(token);
+
+    const { data: trip } = await request(
+      'POST',
+      '/api/trips',
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
+      token,
+    );
+
+    const { status, data } = await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
+
+    expect(status).toBe(200);
+    expect(data.verification_code).toMatch(/^\d{4}$/);
+
+    const db = getDb();
+    const [updated] = await db.select().from(trips).where(eq(trips.id, trip.id));
+    expect(updated!.verification_code).toMatch(/^\d{4}$/);
+    expect(updated!.verification_code).toBe(data.verification_code);
+  });
+
   test('3. en-route from accepted → en_route', async () => {
     const token = await registerAndGetToken(phone, password);
     await createDriverRow(token);
@@ -197,7 +219,59 @@ describe('Trip State Machine', () => {
     expect(updated!.waiting_since).not.toBeNull();
   });
 
-  test('5. start from waiting → in_trip', async () => {
+  test('5. start with correct verification_code → in_trip', async () => {
+    const token = await registerAndGetToken(phone, password);
+    await createDriverRow(token);
+
+    const { data: trip } = await request(
+      'POST',
+      '/api/trips',
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
+      token,
+    );
+
+    const { data: accepted } = await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
+    const code = accepted.verification_code;
+
+    await request('POST', `/api/trips/${trip.id}/en-route`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/arrived`, undefined, token);
+
+    const { status, data } = await request('POST', `/api/trips/${trip.id}/start`, { verification_code: code }, token);
+
+    expect(status).toBe(200);
+    expect(data.status).toBe('in_trip');
+
+    const db = getDb();
+    const events = await db.select().from(tripEvents).where(eq(tripEvents.trip_id, trip.id));
+    expect(events.length).toBe(5);
+    expect(events[4].from_status).toBe('waiting');
+    expect(events[4].to_status).toBe('in_trip');
+  });
+
+  test('5b. start with wrong verification_code fails', async () => {
+    const token = await registerAndGetToken(phone, password);
+    await createDriverRow(token);
+
+    const { data: trip } = await request(
+      'POST',
+      '/api/trips',
+      { origin_lat: -31.9, origin_lng: -65.0, dest_lat: -31.88, dest_lng: -65.02, vehicle_type: 'car', distance_km: 5, duration_minutes: 15 },
+      token,
+    );
+
+    const { data: accepted } = await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
+    expect(accepted.verification_code).toBeTruthy();
+
+    await request('POST', `/api/trips/${trip.id}/en-route`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/arrived`, undefined, token);
+
+    const { status, data } = await request('POST', `/api/trips/${trip.id}/start`, { verification_code: '9999' }, token);
+
+    expect(status).toBe(400);
+    expect(data.error.message).toMatch(/verificación/);
+  });
+
+  test('5c. start without verification_code returns validation error', async () => {
     const token = await registerAndGetToken(phone, password);
     await createDriverRow(token);
 
@@ -212,16 +286,13 @@ describe('Trip State Machine', () => {
     await request('POST', `/api/trips/${trip.id}/en-route`, undefined, token);
     await request('POST', `/api/trips/${trip.id}/arrived`, undefined, token);
 
-    const { status, data } = await request('POST', `/api/trips/${trip.id}/start`, undefined, token);
+    const res = await app.handle(new Request(`http://localhost/api/trips/${trip.id}/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({}),
+    }));
 
-    expect(status).toBe(200);
-    expect(data.status).toBe('in_trip');
-
-    const db = getDb();
-    const events = await db.select().from(tripEvents).where(eq(tripEvents.trip_id, trip.id));
-    expect(events.length).toBe(5);
-    expect(events[4].from_status).toBe('waiting');
-    expect(events[4].to_status).toBe('in_trip');
+    expect(res.status).toBe(400);
   });
 
   test('6. complete from in_trip → completed', async () => {
@@ -235,10 +306,10 @@ describe('Trip State Machine', () => {
       token,
     );
 
-    await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
+    const { data: accepted } = await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
     await request('POST', `/api/trips/${trip.id}/en-route`, undefined, token);
     await request('POST', `/api/trips/${trip.id}/arrived`, undefined, token);
-    await request('POST', `/api/trips/${trip.id}/start`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/start`, { verification_code: accepted.verification_code }, token);
 
     const { status, data } = await request(
       'POST',
@@ -406,9 +477,9 @@ describe('Trip State Machine', () => {
       token,
     );
 
-    await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
+    const { data: accepted } = await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
 
-    const { status, data } = await request('POST', `/api/trips/${trip.id}/start`, undefined, token);
+    const { status, data } = await request('POST', `/api/trips/${trip.id}/start`, { verification_code: accepted.verification_code }, token);
 
     expect(status).toBe(400);
     expect(data.error.code).toBe('BAD_REQUEST');
@@ -456,10 +527,10 @@ describe('Trip State Machine', () => {
       token,
     );
 
-    await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
+    const { data: accepted } = await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
     await request('POST', `/api/trips/${trip.id}/en-route`, undefined, token);
     await request('POST', `/api/trips/${trip.id}/arrived`, undefined, token);
-    await request('POST', `/api/trips/${trip.id}/start`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/start`, { verification_code: accepted.verification_code }, token);
     await request('POST', `/api/trips/${trip.id}/complete`, undefined, token);
 
     const { status, data } = await request(
@@ -489,10 +560,10 @@ describe('Trip State Machine', () => {
       token,
     );
 
-    await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
+    const { data: accepted } = await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
     await request('POST', `/api/trips/${trip.id}/en-route`, undefined, token);
     await request('POST', `/api/trips/${trip.id}/arrived`, undefined, token);
-    await request('POST', `/api/trips/${trip.id}/start`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/start`, { verification_code: accepted.verification_code }, token);
     await request('POST', `/api/trips/${trip.id}/complete`, undefined, token);
 
     const { status, data } = await request(
@@ -522,10 +593,10 @@ describe('Trip State Machine', () => {
       token,
     );
 
-    await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
+    const { data: accepted } = await request('POST', `/api/trips/${trip.id}/accept`, undefined, token);
     await request('POST', `/api/trips/${trip.id}/en-route`, undefined, token);
     await request('POST', `/api/trips/${trip.id}/arrived`, undefined, token);
-    await request('POST', `/api/trips/${trip.id}/start`, undefined, token);
+    await request('POST', `/api/trips/${trip.id}/start`, { verification_code: accepted.verification_code }, token);
     await request('POST', `/api/trips/${trip.id}/complete`, undefined, token);
 
     await request('PUT', `/api/trips/${trip.id}/collect`, { payment_method: 'cash' }, token);
@@ -653,11 +724,12 @@ describe('Trip State Machine', () => {
 
     const acceptRes = await apiRequest('POST', `/api/trips/${tripId}/accept`);
     expect(acceptRes.status).toBe(200);
+    const acceptData = await acceptRes.json();
     const enRouteRes = await apiRequest('POST', `/api/trips/${tripId}/en-route`);
     expect(enRouteRes.status).toBe(200);
     const arrivedRes = await apiRequest('POST', `/api/trips/${tripId}/arrived`);
     expect(arrivedRes.status).toBe(200);
-    const startRes = await apiRequest('POST', `/api/trips/${tripId}/start`);
+    const startRes = await apiRequest('POST', `/api/trips/${tripId}/start`, { verification_code: acceptData.verification_code });
     expect(startRes.status).toBe(200);
 
     const callComplete = async () => {
