@@ -119,6 +119,7 @@ export const tripSchema = z.object({
   passenger_avatar_url: z.string().nullable(),
   passenger_phone: z.string().nullable(),
   passenger_rating: z.number().nullable(),
+  verification_code: z.string().length(4).nullable(),
 });
 
 export const earningsDailySchema = z.object({
